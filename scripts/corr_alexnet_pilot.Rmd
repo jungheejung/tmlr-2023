@@ -1,0 +1,385 @@
+---
+title: "lukas_corr_alex"
+author: "Heejung Jung"
+date: '2022-09-14'
+output:
+  html_document:
+    toc: true
+    theme: united
+    code_folding: hide
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+"""
+This notebook examines whether the correlation coefficients between two metrics 
+are statistically significant or not. 
+
+"""
+# load data
+# calculate correlation
+# fisher z transform 
+# model mean cor value for class layer unit
+
+```{r}
+library(psych)
+library(car)
+library(lme4)
+library(lmerTest)
+library(plyr)
+library(dplyr)
+library(correlation)
+library(ggplot2)
+library(rmarkdown)
+library(readr)
+library(yaml)
+library(tidyverse)
+library(GGally)
+source('http://psych.colorado.edu/~jclab/R/mcSummaryLm.R')
+source("/Users/h/Documents/projects_local/RainCloudPlots/tutorial_R/R_rainclouds.R")
+source("/Users/h/Documents/projects_local/RainCloudPlots/tutorial_R/summarySE.R")
+source("/Users/h/Documents/projects_local/RainCloudPlots/tutorial_R/simulateData.R")
+source("https://gist.githubusercontent.com/benmarwick/2a1bb0133ff568cbe28d/raw/fb53bd97121f7f9ce947837ef1a4c65a73bffb3f/geom_flat_violin.R")
+file.sources = list.files(c("/Users/h/Dropbox/projects_dropbox/social_influence_analysis/scripts/step02_R/utils"),
+                          pattern="*.R", 
+                          full.names=TRUE, 
+                          ignore.case=TRUE)
+sapply(file.sources,source,.GlobalEnv)
+
+```
+```{r}
+getwd()
+```
+
+```{r load data}
+main_dir <- dirname(getwd())
+#alexnet = read.csv("/Users/h/Dropbox/projects_dropbox/other_sideprojects/lukas/alexnet_results.csv")
+alexnet <- read.csv(file.path(main_dir, 'data', 'pilot', 'alexnet_results.csv'))
+```
+```{r calculate correlation}
+alexnet_corr = alexnet %>%
+  group_by(class, layer) %>%
+  summarise(cor = cor(decoding_accuracy_delta,ablation_impact))
+```
+```{r fisher z transform}
+alexnet_corr$z_fisher = z_fisher(alexnet_corr$cor)
+```
+
+# Model versions{.tabset}
+
+
+
+# Main statistical test Question 01 :: Is this correlation significantly different from the null, i.e. 0? 
+Using the fisher z transfor, we test whether tthe correlation coefficients are significantly different from 0, while modeling random intercepts in class and layers (allowing for class and layers to have different "mean" coefficients).
+```{r}
+model_cor = lmer(z_fisher ~ 1 + (1|class) + (1|layer) , data = alexnet_corr)
+summary(model_cor)
+```
+## plot
+box plot with 70 data points. one barplot   
+```{r}
+
+# * dataset: trialorder_groupwise_p2
+# * x-axis: trial_index (sorted)
+# * y-axis: rating
+# * group: cue_ordered, rating_type
+# * DV: mean_per_sub_norm_mean
+# * error bar: se
+
+
+g <- ggplot(
+  data = alexnet_corr,
+  aes(x = "",y = z_fisher)
+  ) +
+
+  geom_point(
+    data = alexnet_corr,
+    aes(x = "",y = z_fisher),
+    #position = position_jitter(width = .05),
+            position = position_jitter(width = .05),
+            size = 1, alpha = 0.8, shape = 20
+    ) +
+  scale_shape_manual(values=c(16))+
+
+geom_errorbar(
+  data = alexnet_corr,
+  aes(
+    x = "",y = z_fisher,
+    ymin = 0.52972 - 0.09758,
+    ymax = 0.52972 + 0.09758
+    ), width = .1, size = 0.5
+  ) +
+  stat_summary(fun.y=mean, geom="point", shape=20, size=6, color="black", fill="black") +
+        #   geom_point(
+        #     data = alexnet_corr,
+        #     aes(
+        #         x = "",y = z_fisher,
+        #        # color = class
+        #     ),
+        #     position = position_jitter(width = .05),
+        #     size = 1, alpha = 0.8, shape = 20
+        # ) +
+geom_hline(yintercept = 0) +
+        # geom_line(
+        #     data = alexnet_corr,
+        #     aes(
+        #         #group = class,
+        #         x = "",y = z_fisher,
+        #         
+        #         #fill = class
+        #     ),
+        #     #linetype = 3,
+        #       alpha = .3, width = .1
+        # ) +
+ # scale_color_manual(values = c("high cue" = "red", 
+                               # "low cue" = "blue")) +
+  xlab("layers") +
+  ylab("correlation (fisher z)") +
+  #ylim(0,100) +
+  theme_bw() 
+g 
+```
+
+# Question 01 :: ISC how similar are the correlations? ICC
+```{r}
+# NOTE: TODO
+```
+
+
+## effectsize
+```{r}
+alexnet_corr %>% rstatix::cohens_d(z_fisher ~ 1, mu = 0)
+```
+
+## plot
+
+# average corr values
+```{r}
+alexnet_naomit <- na.omit(alexnet_corr) 
+unitwise_alex <- meanSummary(alexnet_naomit, c("layer", "class"), "z_fisher")
+
+# * dataset: trialorder_groupwise_p2
+# * x-axis: trial_index (sorted)
+# * y-axis: rating
+# * group: cue_ordered, rating_type
+# * DV: mean_per_sub_norm_mean
+# * error bar: se
+
+iv1 = "trial_index"
+iv2 = "cue_ordered"
+
+g <- ggplot(
+  data = unitwise_alex,
+  aes(x = layer,
+      y = mean_per_sub, 
+      color = class,
+           )  ) +    geom_point(
+    data = unitwise_alex,
+    aes(
+      #shape = as.character(rating_type_key),
+      x =layer,
+      y = mean_per_sub,
+      #group = rating_type_key,
+      color = class
+      ),
+    #position = position_jitter(width = .05),
+    size = 2
+    ) +
+  scale_shape_manual(values=c(16, 21))+
+geom_line()+
+# geom_errorbar(
+#   data = average_alex,
+#   aes(
+#     x = as.numeric(layer),
+#     y = mean_per_sub,
+#     color = class,
+#     #colour = cue_ordered,
+#     ymin = mean_per_sub - sd(mean_per_sub),
+#     ymax = mean_per_sub + sd(mean_per_sub)
+#     ), width = .1, size = 0.5
+#   ) +
+geom_hline(yintercept = 0) +
+        geom_line(
+            data = unitwise_alex,
+            aes(
+                group = class,
+                y = mean_per_sub,
+                x = layer,
+                #fill = .data[[iv2]]
+            ),
+            #linetype = 3,
+              alpha = .3, width = 1
+        ) +
+ # scale_color_manual(values = c("high cue" = "red", 
+                               # "low cue" = "blue")) +
+  xlab("layers") +
+  ylab("correlation (fisher z)") +
+  #ylim(0,100) +
+  theme_bw() 
+g 
+```
+```{r}
+alexnet_naomit <- na.omit(alexnet_corr) 
+layerwise_alex <- meanSummary(alexnet_naomit, c("layer"), "z_fisher")
+
+# * dataset: trialorder_groupwise_p2
+# * x-axis: trial_index (sorted)
+# * y-axis: rating
+# * group: cue_ordered, rating_type
+# * DV: mean_per_sub_norm_mean
+# * error bar: se
+
+iv1 = "trial_index"
+iv2 = "cue_ordered"
+
+g <- ggplot(
+  data = layerwise_alex,
+  aes(x = layer,
+      y = mean_per_sub, 
+
+           )  ) +    geom_point(
+    data = layerwise_alex,
+    aes(
+      #shape = as.character(rating_type_key),
+      x =layer,
+      y = mean_per_sub,
+
+      ),
+    #position = position_jitter(width = .05),
+    size = 2
+    ) +
+  scale_shape_manual(values=c(16, 21))+
+geom_line()+
+geom_errorbar(
+  data = layerwise_alex,
+  aes(
+    x = as.numeric(layer),
+    y = mean_per_sub,
+    #color = class,
+    #colour = cue_ordered,
+    ymin = mean_per_sub - sd,
+    ymax = mean_per_sub + sd
+    ), width = .1, size = 0.5
+  ) +
+          geom_point(
+            data = unitwise_alex,
+            aes(
+                x = layer ,
+                y = mean_per_sub,
+                color = class
+            ),
+            position = position_jitter(width = .05),
+            size = 1, alpha = 0.8, shape = 20
+        ) +
+geom_hline(yintercept = 0) +
+        geom_line(
+            data = unitwise_alex,
+            aes(
+                #group = class,
+                y = mean_per_sub,
+                x = layer,
+                fill = class
+            ),
+            #linetype = 3,
+              alpha = .3, width = .1
+        ) +
+ # scale_color_manual(values = c("high cue" = "red", 
+                               # "low cue" = "blue")) +
+  xlab("layers") +
+  ylab("correlation (fisher z)") +
+  #ylim(0,100) +
+  theme_bw() 
+g 
+```
+
+## plot correlation
+```{r}
+# library(sjPlot)
+# 
+# tab_model(model_cor, p.val = "kr", show.df = TRUE)
+# plot_model(model_cor, vline.color = "red")
+```
+
+# Question 03 :: is there a linear relationship between decoding delta and ablation impact, while allowing for random intercepts of class and layeer? 
+now i'm not so sure
+THis is a slightly different way of asking question 1 - I hope that this method helps with the degrees of freedom, since we're not averaging datapoints into one correlation coefficint
+```{r}
+model_linear = lmer(decoding_accuracy_delta ~ ablation_impact + (ablation_impact|class) + (ablation_impact|layer) , data = alexnet)
+summary(model_linear)
+```
+
+
+
+# Plot ## Is this correlation significantly different from the null, i.e. 0, for each class?? 
+
+```{r}
+#correlation(alexnet_corr, multilevel = TRUE)
+```
+```{r}
+ggplot(alexnet_corr, aes(x = layer, y = z_fisher)) +
+  geom_point(aes(colour = class)) +
+  geom_smooth(aes(colour = class), method = "lm", se = TRUE) +
+  geom_smooth(colour = "black", method = "lm", se = TRUE) +
+  theme_classic()
+```
+
+
+
+
+
+# plot 02 scale lm
+simply plot the raw values on the X and Y axis
+```{r}
+library(ggplot2)
+alexnet_z = alexnet %>%
+        group_by(layer, class) %>%
+        mutate(z_decoding_accuracy_delta = scale(decoding_accuracy_delta),
+               z_ablation_impact = scale(ablation_impact))
+
+ggplot(alexnet_z) + geom_point(aes(x=z_decoding_accuracy_delta, y=z_ablation_impact, color=layer)) + geom_smooth(aes(x=z_decoding_accuracy_delta, y=z_ablation_impact, color=layer)) + facet_wrap( ~class) + theme_bw() + labs(title="bw Theme")
+
+# gg <- ggplot(alexnet_z, aes(x=z_decoding_accuracy_delta, y=z_ablation_impact)) + geom_point() + labs(title="Scatterplot", x="decoding_accuracy_delta", y="ablation_impact")  + facet_wrap( class~layer, ncol=10)
+# print(gg)
+```
+
+scale within layer and class (basically, z score amongst the 16 units)
+```{r}
+library(ggplot2)
+alexnet_z = alexnet %>%
+        group_by(layer, class) %>%
+        mutate(z_decoding_accuracy_delta = scale(decoding_accuracy_delta),
+               z_ablation_impact = scale(ablation_impact))
+
+ggplot(alexnet_z) + 
+  geom_point(aes(x=z_decoding_accuracy_delta, 
+                 y=z_ablation_impact, 
+                 color=layer, 
+                 group = class)
+             ) + 
+  geom_smooth(aes(x=z_decoding_accuracy_delta, 
+                  y=z_ablation_impact, 
+                  color=layer, 
+                  method = "lm")) + 
+  theme_bw() + 
+  labs(title="bw Theme")
+
+```
+```{r}
+ggplot(alexnet_z, aes(z_decoding_accuracy_delta, z_ablation_impact, )) +
+  geom_point(position = position_jitter(width = .2)) +
+  stat_summary(fun.y = mean, na.rm = TRUE, 
+               geom = "point", color = "dodgerblue") +
+  stat_summary(fun.data = mean_cl_normal, na.rm =TRUE, 
+               geom = "errorbar", width = .2, color = "dodgerblue")
+
+
+ggplot(alexnet_z) + 
+  geom_point(aes(x=z_decoding_accuracy_delta, 
+                 y=z_ablation_impact, 
+                 color=layer, 
+                 group = class)
+             ) 
+```
+
+
