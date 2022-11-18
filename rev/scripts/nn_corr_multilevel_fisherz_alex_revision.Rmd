@@ -38,7 +38,6 @@ fisher z transform \# model mean cor value for class layer unit
 ```{r load libraries, include=FALSE}
 library(psych)
 library(car)
-#library(lmSupport)
 library(lme4)
 library(lmerTest)
 library(plyr)
@@ -58,7 +57,6 @@ library(gridExtra)
 library(patchwork)
 library(DescTools)
 
-source('http://psych.colorado.edu/~jclab/R/mcSummaryLm.R')
 source("/Users/h/Documents/projects_local/RainCloudPlots/tutorial_R/R_rainclouds.R")
 source("/Users/h/Documents/projects_local/RainCloudPlots/tutorial_R/summarySE.R")
 source("/Users/h/Documents/projects_local/RainCloudPlots/tutorial_R/simulateData.R")
@@ -81,45 +79,13 @@ dpi = 600
 scale = 2.5
 ```
 
-```{r concatenate dataframe}
-# main_dir <- dirname(getwd())
-# model = 'alexnet'
-# concat_df = data.frame()
-#   for (dv in c('ablation_impact_X_cka', 
-#                'ablation_impact_X_mean_cca_corr', 
-#                'ablation_impact_X_mean_sq_cca_corr',
-#                'ablation_impact_X_procrustes', 
-#                'ablation_impact_X_pwcca',
-#                'decoding_accuracy_delta_X_cka',
-#                'decoding_accuracy_delta_X_mean_cca_corr',
-#                'decoding_accuracy_delta_X_mean_sq_cca_corr',
-#                'decoding_accuracy_delta_X_procrustes', 
-#                'decoding_accuracy_delta_X_pwcca')) {
-# 
-#     if (model == "alexnet") {
-#       data_fname <- file.path(main_dir, 'data', model, paste0(dv, '.csv'))
-#     } else if (model == "mobilenet") {
-#       data_fname <- file.path(main_dir, 'data', model, paste0(dv, '-mobilenet.csv'))
-#     }
-# df <- read.csv(data_fname)
-# df$functionality <- strsplit(dv, '_X_')[[1]][1]
-# df$metric <- strsplit(dv, '_X_')[[1]][2]
-# concat_df <- rbind(concat_df, df)
-# }
-```
-
 # load data
 ```{r}
 main_dir <- dirname(dirname(getwd()))
-fname <- file.path(main_dir, 'rev', 'data', 'all_50_classes_all_metrics_correlations.csv')
+fname <- file.path(main_dir, 'revision', 'data', 'all_50_classes_all_metrics_correlations.csv')
 df <- read.csv(fname)
 df$functionality = df$A
 df$metric = df$B
-# for (functionality in c('decoding_accuracy_delta')){
-#   for (metric in c('cka')){
-# # df %>% dplyr::filter(row(df$functionality) == functionality)
-#   df[df$functionality == functionality & df$metric == metric ,]}
-# }
 concat_df = df
 ```
 
@@ -135,7 +101,6 @@ K = concat_df %>%
 ```
 
 ```{r }
-# concat_df$fisherz = DescTools::FisherZ(concat_df$corr_transform)
 concat_df <- concat_df %>% 
   group_by(class ,A, B)  %>%
   mutate(fisherz = DescTools::FisherZ(corr_transform))
@@ -162,32 +127,8 @@ average_fisherz$metric_con  = factor(average_fisherz$metric_ordered)
 contrasts(average_fisherz$metric_con) = contr.helmert(5)
 ```
 
-```{r testing interim - without random effect}
-lm.full = lm(corr_z ~ func_con * metric_con  , data = average_fisherz)
-summary(lm.full)
-```
 
-```{r multilevel modeling NA }
-concat_df$func_con[concat_df$functionality == "ablation_impact"] <- -0.5
-concat_df$func_con[concat_df$functionality == "decoding_accuracy_delta"] <- 0.5
-
-concat_df$func  = factor(concat_df$functionality)
-concat_df$metric_ordered <- factor(concat_df$metric,
-                                   levels=c("mean_cca_corr","mean_sq_cca_corr","pwcca","cka","procrustes"))
-concat_df$metric_con  = factor(concat_df$metric_ordered)
-
-contrasts(concat_df$metric_con) = contr.helmert(5)
-
-full.v2 = lmer(correlation ~ func_con * metric_con + (func_con * metric_con|class)   , data = concat_df)
-summary(full.v2)
-```
-
-```{r NA}
-full.v3 = lmer(correlation ~ func_con * metric_con + (1|class) + (1|layer)   , data = concat_df)
-summary(full.v3)
-```
-
-# Multileeveel modeling
+# Multilevel modeling
 ```{r multilevel modeling }
 full = lmer(corr_z ~ func_con * metric_con + (1|class)  , data = average_fisherz)
 summary(full)
@@ -263,11 +204,9 @@ groupwise <- summarySEwithin(
 
 subjectwise = classwise
 
-if (any(startsWith(dv_keyword, c("expect", "Expect")))) {
-  color <- c("#1B9E77", "#D95F02")
-} else {
-  color <- c("#D73027", "#4575B4")
-}
+
+color <- c("#D73027", "#4575B4")
+
 
 # ggplot ______________________________________________________________________
 p1 <- ggplot(data = subjectwise,
@@ -281,13 +220,12 @@ p1 <- ggplot(data = subjectwise,
     aes(fill = factor(.data[[iv]])),
     side = 'r',
     position = 'dodge',
-    #position_nudge(x = .1, y = 0),
     adjust = 1.5,
     trim = FALSE,
     alpha = .3,
     colour = NA
   ) +
-  # geom_line() +
+
   geom_line(data = subjectwise,
     aes(
       group = .data[[subject]],
@@ -300,9 +238,7 @@ p1 <- ggplot(data = subjectwise,
     alpha = .3) +
 
   geom_point(
-    # data = subjectwise,
     aes(
-      # group = subject,
       x = as.numeric(.data[[iv]]) - .15,
       y = .data[[subjectwise_mean]],
       color = factor(.data[[iv]])
@@ -342,29 +278,19 @@ p1 <- ggplot(data = subjectwise,
   ylab(ylab) +
   ylim(ylim) +
   theme_bw() + theme_classic2() +
-  # theme(axis.text.x = element_text(
-  #   angle = 45,
-  #   vjust = 1,
-  #   hjust = 1
-  # )) +
   theme(aspect.ratio = 6 / 10) +
   theme(legend.position = "none",
         text = element_text(family = "DejaVu Sans"), 
         plot.title = element_text(size=12))
 
 save_fname <-
-  file.path(main_dir,'rev',
+  file.path(main_dir,'revision',
             'results',
             'figure',
             paste0(model, '01_iv-', iv, '_dv-', dv_keyword, '.png'))
-# alexnet01_iv-func_dv-corr.png
-# alexnet02_iv-metric_dv-corr.png
-# alexnet03_iv-int_dv-corr.png
-# alexnet_iv-func_dv-corr.png
 ggsave(
   save_fname,
   width = w,
-  #height = h,
   unit = "in",
   dpi = 600,
   scale = 2.5
@@ -433,7 +359,6 @@ p2 <- ggplot(data = subjectwise,
     position = position_jitter(width = .05),
     size = 2,
     alpha = 0.8,
-    #shape = 20
   ) +
   
   geom_half_boxplot(
@@ -445,7 +370,6 @@ p2 <- ggplot(data = subjectwise,
     alpha = 0.8,
     width = .2,
     colour = "black",
-    # staplelwd = 0,
     notch = FALSE,
     notchwidth = 0,
     varwidth = FALSE, 
@@ -475,7 +399,7 @@ p2 <- ggplot(data = subjectwise,
         text = element_text(family = "DejaVu Sans"), 
         plot.title = element_text(size=12))
 save_fname <-
-  file.path(main_dir,'rev',
+  file.path(main_dir,'revision',
             'results',
             'figure',
             paste0(model, '02_iv-', iv_keyword, '_dv-', dv_keyword, '.png'))
@@ -562,10 +486,9 @@ p3 <- ggplot(data = subjectwise,
     aes(
       x = .data[[iv1]],
       y = .data[[sub_mean]],
-      #color = interaction(.data[[iv2]],.data[[iv1]])
-      color = varint# .data[[iv2]]
+      color = varint
     ),
-    position = position_jitterdodge(), #position_jitter(width = .05),
+    position = position_jitterdodge(), 
     size = 2,
     alpha = 0.8,
     shape = 20, 
@@ -576,17 +499,12 @@ p3 <- ggplot(data = subjectwise,
     data = subjectwise,
     aes(x = .data[[iv1]],
         y = .data[[sub_mean]],
-        fill = varint),#interaction(metric_ordered,func )),
-        #fill = .data[[iv2]]),
-      
+        fill = varint),
     side = "r",
     outlier.shape = NA,
     alpha = 0.8,
     width = .8,
-    #nudge = 0.2,
     colour = "black",
-    #dodge = TRUE,
-    # staplelwd = 0,
     notch = FALSE,
     notchwidth = 0,
     varwidth = FALSE,
@@ -602,9 +520,7 @@ p3 <- ggplot(data = subjectwise,
 
     guides(fill = "none") +
   guides(color = "none") +
-  #guides(fill = guide_legend(title = legend_title)) +
   ggtitle(ggtitle) +
-  # coord_flip() + #vertical vs horizontal
   xlab(xlab) +
   ylab(ylab) +
     scale_x_discrete(
@@ -613,23 +529,6 @@ p3 <- ggplot(data = subjectwise,
       "decoding_accuracy_delta" = "Decoding accuracy deficits"
     )
   ) +
-#     scale_fill_discrete(
-#     breaks = c("mean_cca_corr ablation_impact", "mean_sq_cca_corr ablation_impact", "pwcca ablation_impact", "cka ablation_impact", "procrustes ablation_impact" ),
-#     labels = c("mean_cca_corr","mean_sq_cca_corr", "pwcca", "cka", "procustes"),
-#     guide = guide_legend(
-#       direction = "horizontal",
-#       title.position = "top",
-#       label.position = "bottom",
-#       label.hjust = 0.5,
-#       label.vjust = 1,
-#       label.theme = element_text(angle = 90)
-#     )
-#   )
-# +
-  # guides(fill =guide_legend(title = legend_title, 
-  #                           override.aes = list(shape = 20, size = .5),
-  #                           )) + 
-
   theme_bw() + theme_classic2() +
     #theme(aspect.ratio=4/6) 
 theme(aspect.ratio = 6 / 10) +
@@ -640,7 +539,7 @@ theme(aspect.ratio = 6 / 10) +
 
 p3
 save_fname <-
-  file.path(main_dir,'rev',
+  file.path(main_dir,'revision',
             'results',
             'figure',
             paste0(model, '03_iv-', iv_keyword, '_dv-', dv_keyword, '.png'))
