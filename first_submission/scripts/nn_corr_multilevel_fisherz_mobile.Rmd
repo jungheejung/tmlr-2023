@@ -87,8 +87,9 @@ dpi = 600
 scale = 2.5
 ```
 
+
 ```{r concatenate dataframe}
-main_dir <- dirname(getwd())
+main_dir <- dirname(dirname(getwd()))
 model = 'mobilenet'
 concat_df = data.frame()
   for (dv in c('ablation_impact_X_cka', 
@@ -103,9 +104,9 @@ concat_df = data.frame()
                'decoding_accuracy_delta_X_pwcca')) {
 
     if (model == "alexnet") {
-      data_fname <- file.path(main_dir, 'data', model, paste0(dv, '.csv'))
+      data_fname <- file.path(main_dir, 'first_submission', 'data', model, paste0(dv, '.csv'))
     } else if (model == "mobilenet") {
-      data_fname <- file.path(main_dir, 'data', model, paste0(dv, '-mobilenet.csv'))
+      data_fname <- file.path(main_dir, 'first_submission', 'data', model, paste0(dv, '-mobilenet.csv'))
     }
 df <- read.csv(data_fname)
 df$functionality <- strsplit(dv, '_X_')[[1]][1]
@@ -146,12 +147,6 @@ contrasts(average_fisherz$metric_con) = contr.helmert(5)
 full = lmer(corr_z ~ func_con * metric_con + (1|class)  , data = average_fisherz)
 summary(full)
 ```
-```{r}
-.4540/sqrt(0.0008049 +0.0008930 ) # d for functionality
-```
-
-
-
 
 
 ```{r barplot functionality}
@@ -200,7 +195,6 @@ p1 <- ggplot(data = subjectwise,
     aes(fill = factor(.data[[iv]])),
     side = 'r',
     position = 'dodge',
-    #position_nudge(x = .1, y = 0),
     adjust = 1.5,
     trim = FALSE,
     alpha = .3,
@@ -249,29 +243,20 @@ p1 <- ggplot(data = subjectwise,
   ylim(ylim )+
   
   theme_bw() + theme_classic2() +
-  # theme(axis.text.x = element_text(
-  #   angle = 45,
-  #   vjust = 1,
-  #   hjust = 1
-  # )) +
   theme(aspect.ratio = 6 / 10) +
   theme(legend.position = "none",
         text = element_text(family = "DejaVu Sans"), 
         plot.title = element_text(size=12))
 
 save_fname <-
-  file.path(main_dir,
+  file.path(main_dir,'first_submission',
             'results',
             'figure',
             paste0(model, '01_iv-', iv, '_dv-', dv_keyword, '.png'))
-# alexnet01_iv-func_dv-corr.png
-# alexnet02_iv-metric_dv-corr.png
-# alexnet03_iv-int_dv-corr.png
-# alexnet_iv-func_dv-corr.png
+
 ggsave(
   save_fname,
   width = w,
-  #height = h,
   unit = "in",
   dpi = 600,
   scale = 2.5
@@ -386,7 +371,7 @@ p2 <- ggplot(data = subjectwise,
         text = element_text(family = "DejaVu Sans"), 
         plot.title = element_text(size=12))
 save_fname <-
-  file.path(main_dir,
+  file.path(main_dir,'first_submission',
             'results',
             'figure',
             paste0(model, '02_iv-', iv_keyword, '_dv-', dv_keyword, '.png'))
@@ -558,7 +543,7 @@ theme(aspect.ratio = 6 / 10) +
 
 p3
 save_fname <-
-  file.path(main_dir,
+  file.path(main_dir,'first_submission',
             'results',
             'figure',
             paste0(model, '03_iv-', iv_keyword, '_dv-', dv_keyword, '.png'))
