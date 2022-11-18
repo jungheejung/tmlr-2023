@@ -1,0 +1,23 @@
+[1] "b = -0.603, t(39.22) = -16.731, p = 0"
+Satterthwaite's method ['lmerModLmerTest']
+Formula: fisherZ ~ 1 + (1 | class) + (1 | layer)
+   Data: df
+
+REML criterion at convergence: 266.8
+
+Scaled residuals: 
+    Min      1Q  Median      3Q     Max 
+-2.9597 -0.5568  0.0042  0.5667  3.8992 
+
+Random effects:
+ Groups   Name        Variance Std.Dev.
+ layer    (Intercept) 0.07106  0.26658 
+ class    (Intercept) 0.00451  0.06715 
+ Residual             0.06173  0.24845 
+Number of obs: 664, groups:  layer, 103; class, 10
+
+Fixed effects:
+            Estimate Std. Error       df t value Pr(>|t|)    
+(Intercept) -0.60296    0.03604 39.21736  -16.73   <2e-16 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1

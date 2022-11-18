@@ -1,0 +1,235 @@
+---
+title: "lucas_corr_alex"
+author: "Heejung Jung"
+date: '2022-09-14'
+output:
+  html_document:
+    toc: true
+    theme: united
+    code_folding: hide
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+"""
+This notebook examines whether the correlation coefficients between two metrics 
+are statistically significant or not. 
+
+"""
+# load data
+# calculate correlation
+# fisher z transform 
+# model mean cor value for class layer unit
+
+```{r}
+library(psych)
+library(car)
+library(lme4)
+library(lmerTest)
+library(plyr)
+library(dplyr)
+library(correlation)
+library(ggplot2)
+library(rmarkdown)
+library(readr)
+library(yaml)
+library(tidyverse)
+library(GGally)
+source('http://psych.colorado.edu/~jclab/R/mcSummaryLm.R')
+source("/Users/h/Documents/projects_local/RainCloudPlots/tutorial_R/R_rainclouds.R")
+source("/Users/h/Documents/projects_local/RainCloudPlots/tutorial_R/summarySE.R")
+source("/Users/h/Documents/projects_local/RainCloudPlots/tutorial_R/simulateData.R")
+source("https://gist.githubusercontent.com/benmarwick/2a1bb0133ff568cbe28d/raw/fb53bd97121f7f9ce947837ef1a4c65a73bffb3f/geom_flat_violin.R")
+file.sources = list.files(c("/Users/h/Dropbox/projects_dropbox/social_influence_analysis/scripts/step02_R/utils"),
+                          pattern="*.R", 
+                          full.names=TRUE, 
+                          ignore.case=TRUE)
+sapply(file.sources,source,.GlobalEnv)
+
+```
+```{r}
+getwd()
+```
+
+```{r figure save parameters}
+font_import(pattern = "DejaVu", prompt = FALSE)
+myFont <- "DejaVu Sans Mono"
+w = 3
+h = 1.8
+units = c("in")
+dpi = 600
+scale = 2.5
+```
+
+```{r load data}
+main_dir <- dirname(getwd())
+model = 'alexnet'
+for (model in c('alexnet')) {
+    if (model == "alexnet") {
+      model_keyword <- "Alexnet"
+    } else if (model == "mobilenet") {
+      model_keyword <- "Mobilenet"
+      }
+data_fname <- file.path(main_dir, 'data','pilot', paste0(model, '_results.csv'))
+df <- read.csv(data_fname)
+df_z = df %>%
+        group_by(layer, class) %>%
+        mutate(z_decoding_accuracy_delta = scale(decoding_accuracy_delta),
+               z_ablation_impact = scale(ablation_impact))
+
+g <- ggplot(df_z) + 
+  geom_point(aes(x=z_decoding_accuracy_delta, y=z_ablation_impact, color=layer), size = 1, alpha = .5) + 
+  #geom_smooth(aes(x=z_decoding_accuracy_delta, y=z_ablation_impact, color=layer ),se = TRUE, alpha = .5, method = lm, span = 0.8) +
+  stat_smooth(aes(x=z_decoding_accuracy_delta, y=z_ablation_impact, color=layer),geom='line', alpha=.8, se=TRUE, method = "loess") +
+  facet_wrap( ~class, ncol = 5) +  
+  labs(title=paste0(model_keyword, " :: Scatterplot of Causal deficit & Non-causal decoding per class and layer")) +
+  coord_fixed(1) +
+  xlab("Non-causal decoding (z-score)") +
+  ylab("Causal deficit (z-score)") +
+  theme_bw() +
+    theme(legend.position = "none",
+      aspect.ratio = 1,
+        text = element_text(family = "DejaVu Sans"), 
+        plot.title = element_text(size=12))
+g
+}
+```
+
+
+
+```{r}
+g
+```
+
+```{r subsample mobilenet}
+match <- unique(df_z$layer)[seq(1, length(unique(df_z$layer)), 6)]
+subset <- df_z[sapply(df_z$layer, function(x) any(x %in% match)),]
+g <- ggplot(subset) + 
+  geom_point(aes(x=z_decoding_accuracy_delta, y=z_ablation_impact, color=layer), size = 1, alpha = .5) + 
+  #geom_smooth(aes(x=z_decoding_accuracy_delta, y=z_ablation_impact, color=layer ),se = TRUE, alpha = .5, method = lm, span = 0.8) +
+  stat_smooth(aes(x=z_decoding_accuracy_delta, y=z_ablation_impact, color=layer),geom='line', alpha=.8, se=TRUE) +
+  facet_wrap( ~class, ncol = 5) +  
+  labs(title=paste0(model_keyword, " :: Scatterplot of Causal deficit & Non-causal decoding per class and layer")) +
+  coord_fixed(1) +
+  xlab("Non-causal decoding (z-score)") +
+  ylab("Causal deficit (z-score)") +
+  theme_bw() +
+    theme(
+      aspect.ratio = 1,
+        text = element_text(family = "DejaVu Sans"), 
+        plot.title = element_text(size=12))
+g
+
+```
+
+
+```{r scale correlation within layer and class}
+library(ggplot2)
+corr_linear = df %>%
+        group_by(layer, class) %>%
+        mutate(z_causal_deficit = scale(ablation_impact),
+              z_noncausal_decoding = scale(decoding_accuracy_delta))
+
+```
+```{r scale correlation within layer and class}
+
+a = corr_linear %>%
+        group_by(layer, class, metric) %>%
+        mutate(mean_metric = mean(correlation))
+
+
+```
+```{r}
+ggplot(corr_linear) +
+  geom_point(aes(x = z_causal_deficit,
+                 y = z_noncausal_decoding,
+                 color = layer)) +
+  geom_smooth(aes(x = z_causal_deficit,
+                  y = z_noncausal_decoding,
+                  color = layer), 
+              method = "loess") +
+  facet_wrap( ~ class, ncol = 5) +
+  theme_bw() +
+  labs(title = "bw Theme")
+```
+
+# Question 03 :: is there a linear relationship between decoding delta and ablation impact, while allowing for random intercepts of class and layeer? 
+now i'm not so sure
+THis is a slightly different way of asking question 1 - I hope that this method helps with the degrees of freedom, since we're not averaging datapoints into one correlation coefficint
+```{r}
+model_linear = lmer(decoding_accuracy_delta ~ ablation_impact + (ablation_impact|class) + (ablation_impact|layer) , data = df)
+summary(model_linear)
+```
+
+
+
+
+
+
+
+
+# plot 02 scale lm
+simply plot the raw values on the X and Y axis
+```{r}
+library(ggplot2)
+alexnet_z = df %>%
+        group_by(layer, class) %>%
+        mutate(z_decoding_accuracy_delta = scale(decoding_accuracy_delta),
+               z_ablation_impact = scale(ablation_impact))
+
+ggplot(alexnet_z) + 
+  geom_point(aes(x=z_decoding_accuracy_delta, 
+                 y=z_ablation_impact, 
+                 color=layer)) + 
+  geom_smooth(aes(x=z_decoding_accuracy_delta, 
+                  y=z_ablation_impact, 
+                  color=layer)) + 
+  facet_wrap( ~class, nrow = 2) + 
+  theme_bw() + theme_classic2()+
+  labs(title="bw Theme")
+
+# gg <- ggplot(alexnet_z, aes(x=z_decoding_accuracy_delta, y=z_ablation_impact)) + geom_point() + labs(title="Scatterplot", x="decoding_accuracy_delta", y="ablation_impact")  + facet_wrap( class~layer, ncol=10)
+# print(gg)
+```
+
+scale within layer and class (basically, z score amongst the 16 units)
+```{r}
+library(ggplot2)
+alexnet_z = alexnet %>%
+        group_by(layer, class) %>%
+        mutate(z_decoding_accuracy_delta = scale(decoding_accuracy_delta),
+               z_ablation_impact = scale(ablation_impact))
+
+ggplot(alexnet_z) + 
+  geom_point(aes(x=z_decoding_accuracy_delta, 
+                 y=z_ablation_impact, 
+                 color=layer, 
+                 group = class)
+             ) + 
+  geom_smooth(aes(x=z_decoding_accuracy_delta, 
+                  y=z_ablation_impact, 
+                  color=layer, 
+                  method = "lm")) + 
+  theme_bw() + 
+  labs(title="bw Theme")
+
+```
+```{r}
+ggplot(alexnet_z, aes(z_decoding_accuracy_delta, z_ablation_impact, )) +
+  geom_point(position = position_jitter(width = .2)) +
+  stat_summary(fun.y = mean, na.rm = TRUE, 
+               geom = "point", color = "dodgerblue") +
+  stat_summary(fun.data = mean_cl_normal, na.rm =TRUE, 
+               geom = "errorbar", width = .2, color = "dodgerblue")
+
+
+ggplot(alexnet_z) + 
+  geom_point(aes(x=z_decoding_accuracy_delta, 
+                 y=z_ablation_impact, 
+                 color=layer, 
+                 group = class)
+             ) 
+```
+
+
