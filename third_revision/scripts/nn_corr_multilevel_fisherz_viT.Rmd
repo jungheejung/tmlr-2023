@@ -519,7 +519,7 @@ ggtitle = paste0(model_keyword," :: Interaction of functionality and metric" )
 legend_title = "Metric"
 xlab = "Functionality"
 ylab = "Correlation between \nmetric and functionality"
-iv_keyword = "int"
+iv_keyword = "funcXmetric"
 dv_keyword = "corr"
 
 int_color = c(

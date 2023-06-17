@@ -505,7 +505,7 @@ ggtitle = paste0(model_keyword," :: Interaction of functionality and layer" )
 legend_title = "Layer"
 xlab = "Functionality"
 ylab = "Correlation between \nlayer and functionality"
-iv_keyword = "int_funcXlayer"
+iv_keyword = "funcXlayer"
 dv_keyword = "corr"
 
 int_color = c("#FFECC9", "#FFDBB5", "#FEC9A1", "#FEB88D", "#FEA779", "#FE9665", "#FD8450", "#FD733C", "#FD6228", "#FC5014", "#FC3F00",
