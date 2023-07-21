@@ -64,9 +64,9 @@ library(gridExtra)
 library(patchwork)
 library(DescTools)
 
-source("/Users/h/Documents/projects_local/RainCloudPlots/tutorial_R/R_rainclouds.R")
-source("/Users/h/Documents/projects_local/RainCloudPlots/tutorial_R/summarySE.R")
-source("/Users/h/Documents/projects_local/RainCloudPlots/tutorial_R/simulateData.R")
+# source("/Users/h/Documents/projects_local/RainCloudPlots/tutorial_R/R_rainclouds.R")
+# source("/Users/h/Documents/projects_local/RainCloudPlots/tutorial_R/summarySE.R")
+# source("/Users/h/Documents/projects_local/RainCloudPlots/tutorial_R/simulateData.R")
 source("https://gist.githubusercontent.com/benmarwick/2a1bb0133ff568cbe28d/raw/fb53bd97121f7f9ce947837ef1a4c65a73bffb3f/geom_flat_violin.R")
 file.sources = list.files(c("/Users/h/Dropbox/projects_dropbox/social_influence_analysis/scripts/step02_R/utils"),
                           pattern="*.R", 
@@ -162,7 +162,7 @@ contrasts(average_fisherz$layer_con) = contr.helmert(12)
 
 # Multilevel modeling
 ```{r multilevel modeling }
-full = lmer(corr_z ~ func_con * layer_con + (1|class) + (1|layer)  , data = average_fisherz)
+full = lmer(corr_z ~ func_con * layer_con + (1|class)   , data = average_fisherz)
 summary(full)
 ```
 
@@ -605,6 +605,424 @@ ggsave(
   scale = 2.5)
 ```
 
+# ggplot interaction
+```{r raincloudplots interaction}
+library(gghalves)
+
+# parameters __________________________________________________________________
+average_fisherz_dropna$func = average_fisherz_dropna$functionality
+int_unitwise <- meanSummary(
+        average_fisherz_dropna,
+        c("class", "func", "layer_ordered"), "corr_z"
+    )
+
+int_groupwise <- summarySEwithin(
+        data = int_unitwise,
+        measurevar = "mean_per_sub", # variable created from above
+        withinvars = c("func", "layer_ordered"), # iv
+        idvar = "class"
+    )
+
+subjectwise = int_unitwise
+subjectwise$layer_ordered <- factor(
+  subjectwise$layer_ordered,
+  levels = c(
+    "encoder.layers.encoder_layer_0",
+    "encoder.layers.encoder_layer_1" ,
+    "encoder.layers.encoder_layer_2" ,
+    "encoder.layers.encoder_layer_3",
+    "encoder.layers.encoder_layer_4",
+    "encoder.layers.encoder_layer_5",
+    "encoder.layers.encoder_layer_6",
+    "encoder.layers.encoder_layer_7",
+    "encoder.layers.encoder_layer_8",
+    "encoder.layers.encoder_layer_9",
+    "encoder.layers.encoder_layer_10",
+    "encoder.layers.encoder_layer_11"
+  )
+)
+subjectwise$varint <-
+  as.factor(paste(subjectwise$layer_ordered, subjectwise$func))
+subjectwise$varint <- factor(
+  subjectwise$varint,
+  levels =  c(
+    "encoder.layers.encoder_layer_0 ablation_impact",
+"encoder.layers.encoder_layer_1 ablation_impact",
+"encoder.layers.encoder_layer_2 ablation_impact",
+"encoder.layers.encoder_layer_3 ablation_impact",
+"encoder.layers.encoder_layer_4 ablation_impact",
+"encoder.layers.encoder_layer_5 ablation_impact",
+"encoder.layers.encoder_layer_6 ablation_impact",
+"encoder.layers.encoder_layer_7 ablation_impact",
+"encoder.layers.encoder_layer_8 ablation_impact",
+"encoder.layers.encoder_layer_9 ablation_impact",
+"encoder.layers.encoder_layer_10 ablation_impact",
+# "encoder.layers.encoder_layer_11 ablation_impact",
+"encoder.layers.encoder_layer_0 decoding_accuracy_delta",
+"encoder.layers.encoder_layer_1 decoding_accuracy_delta",
+"encoder.layers.encoder_layer_2 decoding_accuracy_delta",
+"encoder.layers.encoder_layer_3 decoding_accuracy_delta",
+"encoder.layers.encoder_layer_4 decoding_accuracy_delta",
+"encoder.layers.encoder_layer_5 decoding_accuracy_delta",
+"encoder.layers.encoder_layer_6 decoding_accuracy_delta",
+"encoder.layers.encoder_layer_7 decoding_accuracy_delta",
+"encoder.layers.encoder_layer_8 decoding_accuracy_delta",
+"encoder.layers.encoder_layer_9 decoding_accuracy_delta",
+"encoder.layers.encoder_layer_10 decoding_accuracy_delta",
+"encoder.layers.encoder_layer_11 decoding_accuracy_delta"
+  )
+)
+groupwise = int_groupwise
+iv1 = "func"
+iv2 = "layer_ordered" 
+sub_mean = "mean_per_sub" 
+group_mean = "mean_per_sub_norm_mean" 
+se = "se" ; subject = "class"
+ggtitle = paste0(model_keyword," :: Interaction of functionality and layer" )
+
+legend_title = "Layer"
+xlab = "Functionality"
+ylab = "Correlation between \nlayer and functionality"
+iv_keyword = "funcXlayer"
+dv_keyword = "corr"
+
+int_color = c("#FFECC9", "#FFDBB5", "#FEC9A1", "#FEB88D", "#FEA779", "#FE9665", "#FD8450", "#FD733C", "#FD6228", "#FC5014", "#FC3F00",
+              # decoding 12 conditions
+         "#FFECC9", "#EFD7CE", "#DEC1D2", "#CEACD7", "#BE96DC", "#AE81E0", "#9D6BE5", "#8D56E9", "#7D40EE", "#6D2BF3", "#5C15F7", "#4C00FC"
+)
+
+bw_color = c("#0F0F0F", "#494949", "#838383", "#BDBDBD", "#F7F7F7", "#BDBDBD", "#F7F7F7","#838383", "#BDBDBD", "#BDBDBD")
+p3 <- ggplot(data = subjectwise,
+            aes(y = .data[[sub_mean]],
+                x = .data[[iv1]],
+                fill =varint,
+                width=.9)) +
+  geom_half_violin(
+    aes(fill = varint),#.data[[iv2]]),
+    position = position_nudge(x = .1, y = 0),
+    adjust = 1.5,
+    trim = FALSE,
+    alpha = 0,
+    colour = NA
+  ) +
+
+  geom_point(
+    data = subjectwise,
+    aes(
+      x = .data[[iv1]],
+      y = .data[[sub_mean]],
+      color = varint
+    ),
+    position = position_jitterdodge(), 
+    size = 2,
+    alpha = 0.8,
+    shape = 20, 
+    show.legend=FALSE
+  ) +
+
+  geom_half_boxplot(
+    data = subjectwise,
+    aes(x = .data[[iv1]],
+        y = .data[[sub_mean]],
+        fill = varint),
+    side = "r",
+    outlier.shape = NA,
+    alpha = 0.8,
+    width = .8,
+    colour = "black",
+    notch = FALSE,
+    notchwidth = 0,
+    varwidth = FALSE,
+    errorbar.draw = FALSE,
+    center = TRUE,
+    show.legend=TRUE
+  ) +
+
+  # legend stuff __________________________________________________________________________________ # nolint
+
+  scale_fill_manual(values = int_color, name = "metric", guide = "none") +
+  scale_color_manual( values = int_color, name = "metric", guide = "none") +
+
+  guides(fill = "none") +
+  guides(color = "none") +
+  ggtitle(ggtitle) +
+  xlab(xlab) +
+  ylab(ylab) +
+    scale_x_discrete(
+    labels = c(
+      "ablation_impact" = "Network performance deficits",
+      "decoding_accuracy_delta" = "Decoding accuracy deficits"
+    )
+  ) +
+
+  theme_bw() + theme_classic2() +
+    #theme(aspect.ratio=4/6) 
+theme(aspect.ratio = 6 / 10) +
+  theme(legend.position = "none",
+        text = element_text(family = "DejaVu Sans"), 
+        plot.title = element_text(size=14))
+
+
+p3
+
+p3
+save_fname <-
+  file.path(main_dir,
+            'results',
+            'figure',
+            paste0(model, '03_iv-', iv_keyword, '_dv-', dv_keyword, '.png'))
+
+
+ggsave(
+  save_fname,
+  plot = p3,
+  width = w,
+  #height = h,
+  unit = "in",
+  dpi = 600,
+  scale = 2.5)
 ```
 
+## ggplot metrix X layer X functionality
+```{r concatenate dataframe}
+main_dir <- dirname(getwd())
+main_dir <- "/Users/h/Dropbox/projects_dropbox/other_sideprojects/iclr/third_revision"
+model = 'vit'
+concat_df = data.frame()
+  for (dv in c('vit_ablation_impact_X_cka', 
+               'vit_ablation_impact_X_mean_cca_corr', 
+               'vit_ablation_impact_X_mean_sq_cca_corr',
+               'vit_ablation_impact_X_procrustes', 
+               'vit_ablation_impact_X_pwcca',
+               'vit_decoding_accuracy_delta_X_cka',
+               'vit_decoding_accuracy_delta_X_mean_cca_corr',
+               'vit_decoding_accuracy_delta_X_mean_sq_cca_corr',
+               'vit_decoding_accuracy_delta_X_procrustes', 
+               'vit_decoding_accuracy_delta_X_pwcca')) {
+  if (model == "alexnet") {
+    data_fname <- file.path(main_dir, 'data', model, paste0(dv, '.csv'))
+  } else if (model == "mobilenet") {
+    data_fname <- file.path(main_dir, 'data', model, paste0(dv, '-mobilenet.csv'))
+  } else if (model == "vit") {
+    data_fname <- file.path(main_dir, 'data', model, paste0(dv, '.csv'))
+  }
+  
+df <- read.csv(data_fname)
+newdv <- sub("^vit_", "", dv)
+df$functionality <- strsplit(newdv, '_X_')[[1]][1]
+df$metric <- strsplit(newdv, '_X_')[[1]][2]
+concat_df <- rbind(concat_df, df)
+}
+
+concat_df$layerX <- concat_df$class
+concat_df$classX <- concat_df$layer
+concat_df$class <- concat_df$classX
+concat_df$layer <- concat_df$layerX
+
+concat_df = concat_df %>% mutate(corr_transform = ifelse(metric == "mean_cca_corr" | metric == "mean_sq_cca_corr", -1 * correlation, correlation))
+# parameters __________________________________________________________________
+for (metric in c("cka","mean_cca_corr","mean_sq_cca_corr","procrustes","pwcca"  ) ) {
+  print(metric)
+  
+}
+```
+
+
+```{r concatenate dataframe}
+model_keyword = "ViT"
+N <- concat_df %>%
+  group_by(class ,layer, functionality)  %>%
+  mutate(fisherz = DescTools::FisherZ(corr_transform))
+average_fisherz <- meanSummary(N,
+                         c("class", "layer","metric", "functionality"), "fisherz")
+average_fisherz$fisherz <- average_fisherz$mean_per_sub
+average_fisherz$corr_z = DescTools::FisherZInv(average_fisherz$fisherz)
+
+average_fisherz$func_con[average_fisherz$functionality == "ablation_impact"] <- -0.5
+average_fisherz$func_con[average_fisherz$functionality == "decoding_accuracy_delta"] <- 0.5
+
+average_fisherz$func  = factor(average_fisherz$functionality)
+average_fisherz$layer_ordered <- factor(average_fisherz$layer, 
+                                   levels=c( "encoder.layers.encoder_layer_0",  "encoder.layers.encoder_layer_1" , "encoder.layers.encoder_layer_2" , "encoder.layers.encoder_layer_3",  "encoder.layers.encoder_layer_4",  "encoder.layers.encoder_layer_5",  "encoder.layers.encoder_layer_6",  "encoder.layers.encoder_layer_7",  "encoder.layers.encoder_layer_8", "encoder.layers.encoder_layer_9",  "encoder.layers.encoder_layer_10", "encoder.layers.encoder_layer_11"))
+average_fisherz$layer_con  = factor(average_fisherz$layer_ordered)
+
+contrasts(average_fisherz$layer_con) = contr.helmert(12)
+
+for (metric in c("cka","mean_cca_corr","mean_sq_cca_corr","procrustes","pwcca"  ) ) {
+  print(metric)
+  subset_df = average_fisherz[average_fisherz$metric == metric,]
+
+
+
+int_unitwise <- meanSummary(
+        subset_df,
+        c("class", "func", "layer_ordered"), "corr_z"
+    )
+
+int_groupwise <- summarySEwithin(
+        data = int_unitwise,
+        measurevar = "mean_per_sub", # variable created from above
+        withinvars = c("func", "layer_ordered"), # iv
+        idvar = "class"
+    )
+
+test_subjectwise = int_unitwise
+test_subjectwise$varint <-
+  as.factor(paste(test_subjectwise$layer_ordered, test_subjectwise$func))
+test_subjectwise$varint <- factor(
+  test_subjectwise$varint,
+  levels =  c(
+    "encoder.layers.encoder_layer_0 ablation_impact",
+"encoder.layers.encoder_layer_1 ablation_impact",
+"encoder.layers.encoder_layer_2 ablation_impact",
+"encoder.layers.encoder_layer_3 ablation_impact",
+"encoder.layers.encoder_layer_4 ablation_impact",
+"encoder.layers.encoder_layer_5 ablation_impact",
+"encoder.layers.encoder_layer_6 ablation_impact",
+"encoder.layers.encoder_layer_7 ablation_impact",
+"encoder.layers.encoder_layer_8 ablation_impact",
+"encoder.layers.encoder_layer_9 ablation_impact",
+"encoder.layers.encoder_layer_10 ablation_impact",
+"encoder.layers.encoder_layer_11 ablation_impact",
+"encoder.layers.encoder_layer_0 decoding_accuracy_delta",
+"encoder.layers.encoder_layer_1 decoding_accuracy_delta",
+"encoder.layers.encoder_layer_2 decoding_accuracy_delta",
+"encoder.layers.encoder_layer_3 decoding_accuracy_delta",
+"encoder.layers.encoder_layer_4 decoding_accuracy_delta",
+"encoder.layers.encoder_layer_5 decoding_accuracy_delta",
+"encoder.layers.encoder_layer_6 decoding_accuracy_delta",
+"encoder.layers.encoder_layer_7 decoding_accuracy_delta",
+"encoder.layers.encoder_layer_8 decoding_accuracy_delta",
+"encoder.layers.encoder_layer_9 decoding_accuracy_delta",
+"encoder.layers.encoder_layer_10 decoding_accuracy_delta",
+"encoder.layers.encoder_layer_11 decoding_accuracy_delta"
+  )
+)
+test_groupwise = int_groupwise
+iv1 = "func"
+iv2 = "layer_ordered" 
+sub_mean = "mean_per_sub" 
+group_mean = "mean_per_sub_norm_mean" 
+se = "se" ; subject = "class"
+ggtitle = paste0(model_keyword," :: ", metric, " :: Interaction of functionality and layer" )
+
+legend_title = "Layer"
+xlab = "Functionality"
+ylab = "Correlation between \nRDM and functionality"
+iv_keyword = "funcXlayer"
+dv_keyword = "corr"
+
+int_color = c("#FFECC9", "#FFDBB5", "#FEC9A1", "#FEB88D", "#FEA779", "#FE9665", "#FD8450", "#FD733C", "#FD6228", "#FC5014", "#FC3F00","red",
+              # decoding 12 conditions
+         "#FFECC9", "#EFD7CE", "#DEC1D2", "#CEACD7", "#BE96DC", "#AE81E0", "#9D6BE5", "#8D56E9", "#7D40EE", "#6D2BF3", "#5C15F7", "#4C00FC"
+)
+
+bw_color = c("#0F0F0F", "#494949", "#838383", "#BDBDBD", "#F7F7F7", "#BDBDBD", "#F7F7F7","#838383", "#BDBDBD", "#BDBDBD")
+# rows_with_nan <- apply(int_groupwise$mean_per_sub_mean, 1, function(row) any(is.na(row)))
+# if (any(is.na(int_groupwise[["mean_per_sub_mean"]]))) {
+    # If NaNs are present, remove the corresponding colors
+# remove colors###########
+num_nans <- which(is.na(int_groupwise[["mean_per_sub_mean"]]))
+int_color <- int_color[-num_nans]
+# # Drop rows with NaN values in a specific column
+subjectwise <- test_subjectwise[complete.cases(test_subjectwise$mean_per_sub), , drop = FALSE]
+groupwise <- test_groupwise[complete.cases(test_groupwise$mean_per_sub_mean), , drop = FALSE]
+print(unique(subjectwise$varint))
+# print(unique(groupwise$layer_ordered))
+##########################
+p3 <- ggplot(data = subjectwise,
+            aes(y = .data[[sub_mean]],
+                x = .data[[iv1]],
+                fill = varint,
+                width=.9)) +
+  geom_half_violin(
+    aes(fill = varint),#.data[[iv2]]),
+    position = position_nudge(x = .1, y = 0),
+    adjust = 1.5,
+    trim = FALSE,
+    alpha = 0,
+    colour = NA
+  ) +
+
+  geom_point(
+    data = subjectwise,
+    aes(
+      x = .data[[iv1]],
+      y = .data[[sub_mean]],
+      color = varint
+    ),
+    position = position_jitterdodge(), 
+    size = 2,
+    alpha = 0.8,
+    shape = 20, 
+    show.legend=FALSE
+  ) +
+
+  geom_half_boxplot(
+    data = subjectwise,
+    aes(x = .data[[iv1]],
+        y = .data[[sub_mean]],
+        fill = varint),
+    side = "r",
+    outlier.shape = NA,
+    alpha = 0.8,
+    width = .8,
+    colour = "black",
+    notch = FALSE,
+    notchwidth = 0,
+    varwidth = FALSE,
+    errorbar.draw = FALSE,
+    center = TRUE,
+    show.legend=FALSE
+  ) +
+
+  # legend stuff __________________________________________________________________________________ # nolint
+
+  # scale_fill_manual(values = int_color, name = "varint", guide = "none") +
+  # scale_color_manual( values = int_color, name = "varint", guide = "none") +
+
+  guides(fill = "none") +
+  guides(color = "none") +
+  ggtitle(ggtitle) +
+  xlab(xlab) +
+  ylab(ylab) +
+  scale_x_discrete(
+    labels = c(
+      "ablation_impact" = "Network performance deficits",
+      "decoding_accuracy_delta" = "Decoding accuracy deficits"
+    )
+  ) +
+
+  theme_bw() +
+  theme_classic2() +
+    #theme(aspect.ratio=4/6)
+theme(aspect.ratio = 6 / 10) +
+  theme(
+    # legend.position = "bottom",
+        text = element_text(family = "DejaVu Sans"),
+        plot.title = element_text(size=14)) 
+#   labs(fill = "legend")
+
+
+print(p3)
+
+p3
+save_fname <-
+  file.path(main_dir,
+            'results',
+            'figure',
+            paste0(model, '04_iv-', iv_keyword, '_dv-', dv_keyword, '_metric-', metric, '.png'))
+
+w = 3
+ggsave(
+  save_fname,
+  plot = p3,
+  width = w,
+  #height = h,
+  unit = "in",
+  dpi = 600, 
+  scale = 5)
+
+}
+```
 

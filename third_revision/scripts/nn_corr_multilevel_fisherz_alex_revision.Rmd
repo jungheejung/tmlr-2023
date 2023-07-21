@@ -1,0 +1,613 @@
+---
+title: "iclr_corr"
+author: "Anonymous"
+date: '2022-11-11'
+output:
+  html_document:
+    toc: true
+    theme: united
+    code_folding: hide
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+""" This notebook examines whether the correlation coefficients between
+two metrics are statistically significant or not.
+
+Factors: \* functionality: 1) ablation impact 2) decoding accuracy \*
+metrics: 1) cka 2) mean_cca-Corr 3) mean_sq_cca_corr 4) procrustes 5)
+pwcca
+
+Methods:
+
+-   linear model of correlation coefficient (different from 0), modeling
+    random intercepts for class and layer
+-   I use fisher z to transform these correlation coefficients into Z
+    vlaues (normal distribution)
+-   From that, we get the t-estimate, testing whether this is
+    significant
+-   Afterward, I plan to convert the B0 estimate back into an r value,
+    which is interpretable.
+
+TODO: concatenate all .csv files make sure that the factor information
+is inserted into each """ \# load data \# calculate correlation \#
+fisher z transform \# model mean cor value for class layer unit
+
+## libraries
+```{r load libraries, include=FALSE}
+library(psych)
+library(car)
+library(lme4)
+library(lmerTest)
+library(plyr)
+library(dplyr)
+library(correlation)
+library(ggplot2)
+library(rmarkdown)
+library(readr)
+library(yaml)
+library(tidyverse)
+library(GGally)
+library(DescTools)
+library(gghalves)
+library(ggpubr)
+library(extrafont)
+library(gridExtra)
+library(patchwork)
+library(DescTools)
+
+source("/Users/h/Documents/projects_local/RainCloudPlots/tutorial_R/R_rainclouds.R")
+source("/Users/h/Documents/projects_local/RainCloudPlots/tutorial_R/summarySE.R")
+source("/Users/h/Documents/projects_local/RainCloudPlots/tutorial_R/simulateData.R")
+source("https://gist.githubusercontent.com/benmarwick/2a1bb0133ff568cbe28d/raw/fb53bd97121f7f9ce947837ef1a4c65a73bffb3f/geom_flat_violin.R")
+file.sources = list.files(c("/Users/h/Dropbox/projects_dropbox/social_influence_analysis/scripts/step02_R/utils"),
+                          pattern="*.R", 
+                          full.names=TRUE, 
+                          ignore.case=TRUE)
+sapply(file.sources,source,.GlobalEnv)
+
+```
+
+```{r figure save parameters}
+font_import(pattern = "DejaVu", prompt = FALSE)
+myFont <- "DejaVu Sans Mono"
+w = 3
+h = 1.8
+units = c("in")
+dpi = 600
+scale = 2.5
+```
+
+# load data
+```{r}
+main_dir <- dirname(dirname(getwd()))
+fname <- file.path(main_dir, 'revision', 'data', 'all_50_classes_all_metrics_correlations.csv')
+df <- read.csv(fname)
+df$functionality = df$A
+df$metric = df$B
+concat_df = df
+```
+
+```{r reverse code and contrast code}
+concat_df = concat_df %>% mutate(corr_transform = ifelse(metric == "mean_cca_corr" | metric == "mean_sq_cca_corr", -1 * correlation, correlation))
+```
+
+# fisher z transform
+```{r fisher Z along layer}
+K = concat_df %>% 
+  group_by(class ,A, B)  %>%
+  mutate(fisherz = DescTools::FisherZ(corr_transform))
+```
+
+```{r }
+concat_df <- concat_df %>% 
+  group_by(class ,A, B)  %>%
+  mutate(fisherz = DescTools::FisherZ(corr_transform))
+average_fisherz <- meanSummary(concat_df,
+                         c("class", "functionality", "metric"), "fisherz")
+average_fisherz$fisherz <- average_fisherz$mean_per_sub
+average_fisherz$corr_z = DescTools::FisherZInv(average_fisherz$fisherz)
+```
+
+1)  transformed mean_cca_corr mean_sq_cca_corr inverse
+2)  fisher z for correlations
+3)  within class/functionality/metric
+4)  average
+
+```{r contrast code}
+average_fisherz$func_con[average_fisherz$functionality == "ablation_impact"] <- -0.5
+average_fisherz$func_con[average_fisherz$functionality == "decoding_accuracy_delta"] <- 0.5
+
+average_fisherz$func  = factor(average_fisherz$functionality)
+average_fisherz$metric_ordered <- factor(average_fisherz$metric, 
+                                   levels=c("mean_cca_corr","mean_sq_cca_corr","pwcca","cka","procrustes"))
+average_fisherz$metric_con  = factor(average_fisherz$metric_ordered)
+
+contrasts(average_fisherz$metric_con) = contr.helmert(5)
+```
+
+
+# Multilevel modeling
+```{r multilevel modeling }
+full = lmer(corr_z ~ func_con * metric_con + (1|class)  , data = average_fisherz)
+summary(full)
+```
+
+# pairwisee
+```{r}
+library(emmeans)
+emmeans(full, list(pairwise ~ metric_con* func_con), adjust = "tukey")
+```
+
+```{r}
+Anova(full, type = "III", test.statistic = "F")
+```
+
+```{r}
+library(emmeans)
+emm1 = emmeans(full, specs =  ~ metric_con* func_con)
+
+cka_mean = c(0,0,0,1/2,0, 0,0,0,1/2,0)
+procrustes_mean = c(0,0,0,0,1/2, 0,0,0,0,1/2)
+
+cka_mean_causal = c(0,0,0,1/2,0, 0,0,0,0,0)
+procrustes_mean_causal = c(0,0,0,0,1/2, 0,0,0,0,0)
+
+cka_mean_noncausal = c(0,0,0,0,0, 0,0,0,1/2,0)
+procrustes_mean_noncausal = c(0,0,0,0,0, 0,0,0,0,1/2)
+
+cca_mean = c(1/6, 1/6, 1/6, 0, 0, 1/6, 1/6, 1/6, 0, 0)
+cka_pro = c(0,0,0,1/4,1/4, 0,0,0,1/4,1/4)
+
+cca_mean_causal = c(1/3, 1/3, 1/3, 0, 0,0,0,0,0,0)
+cka_pro_causal = c(0,0,0,1/2,1/2,0,0,0,0,0)
+
+cca_mean_noncausal = c(0,0,0,0,0,1/3, 1/3, 1/3, 0, 0)
+cka_pro_noncausal = c(0,0,0,0,0,  0,0,0,1/2,1/2)
+
+int = c(1,1,1,1,1,-1,-1,-1,-1,-1)
+contrast(emm1, method = list("cka/procrustes vs. mean_cca/mean_sq/pwcca on average" = cka_pro - cca_mean, 
+                             "procrustes vs. cka on average" = procrustes_mean - cka_mean,
+                             "procrustes vs. cka causal" = procrustes_mean_causal - cka_mean_causal,
+                             "procrustes vs. cka noncausal" = procrustes_mean_noncausal - cka_mean_noncausal,
+                             "within causal, cka/procrustes vs. mean_cca/mean_sq/pwcca" =  cka_pro_causal - cca_mean_causal,
+                             "within noncausal, cka/procrustes vs. mean_cca/mean_sq/pwcca" = cka_pro_noncausal - cca_mean_noncausal) )
+```
+
+```{r barplot functionality}
+# parameters __________________________________________________________________
+model = 'alexnet'
+model_keyword = "Alexnet"
+subjectwise_mean = "mean_per_sub"
+group_mean = "mean_per_sub_norm_mean"
+iv = "func"
+ylim = c(-.25, .8)
+se = "se"
+subject = "class"
+ggtitle = paste0(model_keyword,
+                 " :: Functionality, averaged across layers and classes")
+legend_title = "Functionality"
+xlab = "Functionality "
+ylab = "Correlation between \nmetric and functionality"
+
+dv_keyword = "corr"
+
+classwise <- meanSummary(average_fisherz,
+                         c(subject, iv), "corr_z")
+groupwise <- summarySEwithin(
+  data = classwise,
+  measurevar = "mean_per_sub",
+  withinvars = c(iv),
+  idvar = subject
+)
+
+subjectwise = classwise
+
+
+color <- c("#D73027", "#4575B4")
+
+
+# ggplot ______________________________________________________________________
+p1 <- ggplot(data = subjectwise,
+            aes(
+              y = .data[[subjectwise_mean]],
+              x = factor(.data[[iv]]),
+              fill = factor(.data[[iv]])
+            )) +
+  
+  geom_half_violin(
+    aes(fill = factor(.data[[iv]])),
+    side = 'r',
+    position = 'dodge',
+    adjust = 1.5,
+    trim = FALSE,
+    alpha = .3,
+    colour = NA
+  ) +
+
+  geom_line(data = subjectwise,
+    aes(
+      group = .data[[subject]],
+      x = as.numeric(.data[[iv]]) - .15,
+      y = .data[[subjectwise_mean]],
+      fill = factor(.data[[iv]])
+      ),
+    linetype = "solid",
+    color = "grey",
+    alpha = .3) +
+
+  geom_point(
+    aes(
+      x = as.numeric(.data[[iv]]) - .15,
+      y = .data[[subjectwise_mean]],
+      color = factor(.data[[iv]])
+    ),
+    position = position_jitter(width = .05),
+    size = 2,
+    alpha = 0.8,
+    
+  ) +
+  
+  geom_half_boxplot(
+    aes(x = .data[[iv]],
+        y = .data[[subjectwise_mean]],
+        fill = .data[[iv]]),
+    side = "r",
+    outlier.shape = NA,
+    alpha = 0.8,
+    width = .1,
+    colour = "black",
+    errorbar.draw = FALSE
+  ) +
+  
+  # legend stuff ________________________________________________________
+  
+  guides(color = "none") +
+  guides(fill = guide_legend(title = legend_title)) +
+  scale_fill_manual(values = color) +
+  scale_color_manual(values = color) +
+  ggtitle(ggtitle) +
+  scale_x_discrete(
+    labels = c(
+      "ablation_impact" = "Network performance deficits",
+      "decoding_accuracy_delta" = "Decoding accuracy deficits"
+    )
+  ) +
+  xlab(xlab) +
+  ylab(ylab) +
+  ylim(ylim) +
+  theme_bw() + theme_classic2() +
+  theme(aspect.ratio = 6 / 10) +
+  theme(legend.position = "none",
+        text = element_text(family = "DejaVu Sans"), 
+        plot.title = element_text(size=12))
+
+save_fname <-
+  file.path(main_dir,'revision',
+            'results',
+            'figure',
+            paste0(model, '01_iv-', iv, '_dv-', dv_keyword, '.png'))
+ggsave(
+  save_fname,
+  width = w,
+  unit = "in",
+  dpi = 600,
+  scale = 2.5
+)
+p1
+```
+
+```{r barplot metric}
+# parameters __________________________________________________________________
+metric_classwise <- meanSummary(
+        average_fisherz,
+        c("class","metric_con"), "corr_z"
+    )
+
+metric_groupwise <- summarySEwithin(
+        data = metric_classwise,
+        measurevar = "mean_per_sub", # variable created from above
+        withinvars = c( "metric_con"), # iv
+        idvar = "class"
+    )
+
+subjectwise = metric_classwise
+groupwise = metric_groupwise
+subjectwise_mean = "mean_per_sub"
+group_mean = "mean_per_sub_norm_mean"
+iv = "metric_con"
+ylim = c(0, .5)
+se = "se"
+subject = "class"
+ggtitle = paste0(model_keyword, " :: Metrics, averaged across layers and classes")
+legend_title = "metric"
+xlab = "Metric"
+ylab = "Correlation between \nmetric and functionality"
+iv_keyword = "metric"
+dv_keyword = "corr"
+
+if (any(startsWith(dv_keyword, c("expect", "Expect")))) {
+  color <- c("#464655", "#898983","#B6B6C1", "#CECEE0", "#DEDEEF")
+} else {
+  color <- c( "#000000","#2D0040", "#5A0080","#8600BF","#B300FF")
+}
+
+# ggplot ______________________________________________________________________
+p2 <- ggplot(data = subjectwise,
+            aes(
+              y = .data[[subjectwise_mean]],
+              x = factor(.data[[iv]]),
+              fill = factor(.data[[iv]])
+            )) +
+  geom_half_violin(
+    aes(fill = factor(.data[[iv]])),
+    side = 'r',
+    position = 'dodge',#position_nudge(x = .1, y = 0),
+    adjust = 1.5,
+    trim = TRUE,
+    alpha = .3,
+    colour = NA
+  ) +
+  
+  geom_point(
+    aes(
+      x = as.numeric(factor(.data[[iv]])) - .15 ,
+      y = .data[[subjectwise_mean]],
+      color = factor(.data[[iv]])
+    ),
+    position = position_jitter(width = .05),
+    size = 2,
+    alpha = 0.8,
+  ) +
+  
+  geom_half_boxplot(
+    aes(x = .data[[iv]],
+        y = .data[[subjectwise_mean]],
+        fill = .data[[iv]]),
+    side = "r",
+    outlier.shape = NA,
+    alpha = 0.8,
+    width = .2,
+    colour = "black",
+    notch = FALSE,
+    notchwidth = 0,
+    varwidth = FALSE, 
+    errorbar.draw = FALSE
+  ) +
+  
+  
+  # legend stuff ________________________________________________________ # nolint
+
+  guides(fill = guide_legend(override.aes = list(shape = 20, size = 1, alpha = 1))) +
+           theme(legend.title = legend_title) +
+  scale_shape(guide=FALSE) +
+  scale_fill_manual(values = color) +
+  scale_color_manual(values = color) +
+  ggtitle(ggtitle) +
+  xlab(xlab) +
+  ylab(ylab) +
+  ylim(ylim) +
+  theme_bw() + theme_classic2() +
+  theme(axis.text.x = element_text(
+    angle = 30,
+    vjust = 1,
+    hjust = 1
+  )) +
+  theme(aspect.ratio = 6 / 10) +
+  theme(legend.position = "none",
+        text = element_text(family = "DejaVu Sans"), 
+        plot.title = element_text(size=12))
+save_fname <-
+  file.path(main_dir,'revision',
+            'results',
+            'figure',
+            paste0(model, '02_iv-', iv_keyword, '_dv-', dv_keyword, '.png'))
+ggsave(
+  save_fname,
+  width = w,
+  #height = h,
+  unit = "in",
+  dpi = 600,
+  scale = 2.5
+)
+
+p2
+```
+
+```{r barplot interaction}
+library(gghalves)
+
+# parameters __________________________________________________________________
+int_unitwise <- meanSummary(
+        average_fisherz,
+        c("class", "func", "metric_ordered"), "corr_z"
+    )
+
+int_groupwise <- summarySEwithin(
+        data = int_unitwise,
+        measurevar = "mean_per_sub", # variable created from above
+        withinvars = c("func", "metric_ordered"), # iv
+        idvar = "class"
+    )
+
+subjectwise = int_unitwise
+subjectwise$metric_ordered <- factor(subjectwise$metric_ordered, levels = c("mean_cca_corr", "mean_sq_cca_corr", "pwcca", "cka", "procrustes"))
+subjectwise$varint <- as.factor(paste(subjectwise$metric_ordered, subjectwise$func))
+subjectwise$varint <- factor(subjectwise$varint, 
+                             levels = c("mean_cca_corr ablation_impact", "mean_sq_cca_corr ablation_impact", "pwcca ablation_impact", "cka ablation_impact", "procrustes ablation_impact", 
+                                        "mean_cca_corr decoding_accuracy_delta", "mean_sq_cca_corr decoding_accuracy_delta", "pwcca decoding_accuracy_delta", "cka decoding_accuracy_delta", "procrustes decoding_accuracy_delta" ))
+groupwise = int_groupwise
+iv1 = "func"
+iv2 = "metric_ordered" 
+sub_mean = "mean_per_sub" 
+group_mean = "mean_per_sub_norm_mean" 
+se = "se" ; subject = "class"
+ggtitle = paste0(model_keyword," :: Interaction of functionality and metric" )
+
+legend_title = "Metric"
+xlab = "Functionality"
+ylab = "Correlation between \nmetric and functionality"
+iv_keyword = "int"
+dv_keyword = "corr"
+
+int_color = c(
+  "#000000",
+   "#3F0005",
+   "#7D000B",
+   "#BC0010",
+   "#FA0015",
+   "#000000",
+   "#00003F",
+   "#00007D",
+   "#0000BC",
+   "#0000FA"
+)
+
+bw_color = c("#0F0F0F", "#494949", "#838383", "#BDBDBD", "#F7F7F7")
+  # decoding
+p3 <- ggplot(data = subjectwise,
+            aes(y = .data[[sub_mean]],
+                x = .data[[iv1]],
+                fill =varint,#.data[[iv2]],# varint, #.data[[iv2]],
+                width=.9)) +
+  #coord_cartesian(ylim = ylim, expand = TRUE) +
+  geom_flat_violin(
+    aes(fill = varint),#.data[[iv2]]),
+    position = position_nudge(x = .1, y = 0),
+    adjust = 1.5,
+    trim = FALSE,
+    alpha = 0,
+    colour = NA
+  ) +
+
+  geom_point(
+    data = subjectwise,
+    aes(
+      x = .data[[iv1]],
+      y = .data[[sub_mean]],
+      color = varint
+    ),
+    position = position_jitterdodge(), 
+    size = 2,
+    alpha = 0.8,
+    shape = 20, 
+    show.legend=FALSE
+  ) +
+
+  geom_half_boxplot(
+    data = subjectwise,
+    aes(x = .data[[iv1]],
+        y = .data[[sub_mean]],
+        fill = varint),
+    side = "r",
+    outlier.shape = NA,
+    alpha = 0.8,
+    width = .8,
+    colour = "black",
+    notch = FALSE,
+    notchwidth = 0,
+    varwidth = FALSE,
+    errorbar.draw = FALSE,
+    center = TRUE,
+    show.legend=TRUE
+  ) +
+
+  # legend stuff __________________________________________________________________________________ # nolint
+
+  scale_fill_manual(values = int_color, name = "metric", guide = "none") +
+  scale_color_manual( values = int_color, name = "metric", guide = "none") +
+
+    guides(fill = "none") +
+  guides(color = "none") +
+  ggtitle(ggtitle) +
+  xlab(xlab) +
+  ylab(ylab) +
+    scale_x_discrete(
+    labels = c(
+      "ablation_impact" = "Network performance deficits",
+      "decoding_accuracy_delta" = "Decoding accuracy deficits"
+    )
+  ) +
+  theme_bw() + theme_classic2() +
+    #theme(aspect.ratio=4/6) 
+theme(aspect.ratio = 6 / 10) +
+  theme(legend.position = "none",
+        text = element_text(family = "DejaVu Sans"), 
+        plot.title = element_text(size=14))
+
+
+p3
+save_fname <-
+  file.path(main_dir,'revision',
+            'results',
+            'figure',
+            paste0(model, '03_iv-', iv_keyword, '_dv-', dv_keyword, '.png'))
+
+
+ggsave(
+  save_fname,
+  plot = p3,
+  width = w,
+  #height = h,
+  unit = "in",
+  dpi = 600,
+  scale = 2.5)
+```
+
+```{r}
+figure <- ggarrange(p1,p2,p3,
+                    labels = c("A", "B", "C"),
+                    ncol = 2, nrow = 2)
+```
+
+```{r}
+library(patchwork)
+p1 / p2 / p3 + plot_layout(ncol = 1, nrow = 3, 
+                                                 
+                                                  widths = 30)
+```
+
+```{r}
+library(grid)
+grid.draw(rbind(ggplotGrob(p1), ggplotGrob(p2), size = "last"))
+```
+
+# references
+
+effect size
+<https://stats.stackexchange.com/questions/257985/how-can-i-derive-effect-sizes-in-lme4-and-describe-the-magnitude-of-fixed-effect>
+
+# linear plots
+
+```{r pivot dataframe long to wide}
+library(tidyverse)
+
+# subset = concat_df %>% select(X, class, layer, correlation, performance, metric)
+# wide = subset %>% 
+#    mutate(performance = str_c('func_', performance)) %>%
+#    pivot_wider(names_from = performance, values_from = c(correlation))
+
+```
+
+```{r ignore, eval=FALSE, include=FALSE}
+
+corr_linear %>%
+        group_by(layer, class, metric) %>%
+        mutate(mean_metric = scale(metric),
+              z_noncausal_decoding = scale(func_decoding_accuracy_delta))
+
+```
+
+```{r eval=FALSE, include=FALSE}
+ggplot(corr_linear) +
+  geom_point(aes(x = z_causal_deficit,
+                 y = z_noncausal_decoding,
+                 color = layer)) +
+  geom_smooth(aes(x = z_causal_deficit,
+                  y = z_noncausal_decoding,
+                  color = layer)) +
+  facet_wrap( ~ class, ncol = 5) +
+  theme_bw() +
+  labs(title = "bw Theme")
+```
