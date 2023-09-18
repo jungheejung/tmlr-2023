@@ -1,0 +1,761 @@
+---
+title: "nn_corr_multilevel_fisherz_resnet50_revision_perlayer"
+author: "Anonymous"
+date: "2023-09-18"
+output: html_document
+---
+
+
+""" This notebook examines whether the correlation coefficients between
+two metrics are statistically significant or not.
+
+Factors: \* functionality: 1) ablation impact 2) decoding accuracy \*
+metrics: 1) cka 2) mean_cca-Corr 3) mean_sq_cca_corr 4) procrustes 5)
+pwcca
+
+Methods:
+
+-   linear model of correlation coefficient (different from 0), modeling
+    random intercepts for class and layer
+-   I use fisher z to transform these correlation coefficients into Z
+    vlaues (normal distribution)
+-   From that, we get the t-estimate, testing whether this is
+    significant
+-   Afterward, I plan to convert the B0 estimate back into an r value,
+    which is interpretable.
+
+TODO: concatenate all .csv files make sure that the factor information
+is inserted into each """ \# load data \# calculate correlation \#
+fisher z transform \# model mean cor value for class layer unit
+
+## libraries
+```{r load libraries, include=FALSE}
+library(psych)
+library(car)
+#library(lmSupport)
+library(lme4)
+library(lmerTest)
+library(plyr)
+library(dplyr)
+library(correlation)
+library(ggplot2)
+library(rmarkdown)
+library(readr)
+library(yaml)
+library(tidyverse)
+library(GGally)
+library(DescTools)
+library(gghalves)
+library(ggpubr)
+library(extrafont)
+library(gridExtra)
+library(patchwork)
+library(DescTools)
+library(emmeans)
+source("https://gist.githubusercontent.com/benmarwick/2a1bb0133ff568cbe28d/raw/fb53bd97121f7f9ce947837ef1a4c65a73bffb3f/geom_flat_violin.R")
+main_dir <- dirname(getwd())
+file.sources = list.files(file.path(main_dir, 'utils'),
+                          pattern="*.R", 
+                          full.names=TRUE, 
+                          ignore.case=TRUE)
+sapply(file.sources,source,.GlobalEnv)
+
+```
+
+```{r figure save parameters, message=FALSE, warning=FALSE}
+font_import(pattern = "DejaVu", prompt = FALSE)
+myFont <- "DejaVu Sans Mono"
+w = 3
+h = 1.8
+units = c("in")
+dpi = 600
+scale = 2.5
+```
+
+# load data 
+```{r concatenate dataframe}
+main_dir <- dirname(getwd())
+model = 'resnet50'
+concat_df = data.frame()
+  for (dv in c('resnet50_ablation_impact_X_cka', 
+               'resnet50_ablation_impact_X_mean_cca_corr', 
+               'resnet50_ablation_impact_X_mean_sq_cca_corr',
+               'resnet50_ablation_impact_X_procrustes', 
+               'resnet50_ablation_impact_X_pwcca',
+               'resnet50_decoding_accuracy_delta_X_cka',
+               'resnet50_decoding_accuracy_delta_X_mean_cca_corr',
+               'resnet50_decoding_accuracy_delta_X_mean_sq_cca_corr',
+               'resnet50_decoding_accuracy_delta_X_procrustes', 
+               'resnet50_decoding_accuracy_delta_X_pwcca')) {
+  if (model == "alexnet") {
+    data_fname <- file.path(main_dir, 'data', model, paste0(dv, '.csv'))
+  } else if (model == "mobilenet") {
+    data_fname <- file.path(main_dir, 'data', model, paste0(dv, '-mobilenet.csv'))
+  } else if (model == "resnet50") {
+    data_fname <- file.path(main_dir, 'data', model, paste0(dv, '.csv'))
+  }
+  
+df <- read.csv(data_fname)
+newdv <- sub("^resnet50_", "", dv)
+df$functionality <- strsplit(newdv, '_X_')[[1]][1]
+df$metric <- strsplit(newdv, '_X_')[[1]][2]
+concat_df <- rbind(concat_df, df)
+}
+
+```
+
+# load data
+```{r reverse code and contrast code}
+concat_df = concat_df %>% mutate(corr_transform = ifelse(metric == "mean_cca_corr" | metric == "mean_sq_cca_corr", -1 * correlation, correlation))
+```
+
+```{r fisher z transform}
+N <- concat_df %>%
+  group_by(class ,layer, functionality)  %>%
+  mutate(fisherz = DescTools::FisherZ(corr_transform))
+average_fisherz <- meanSummary(N,
+                         c("class", "layer", "functionality"), "fisherz")
+average_fisherz$fisherz <- average_fisherz$mean_per_sub
+average_fisherz$corr_z = DescTools::FisherZInv(average_fisherz$fisherz)
+
+```
+
+1)  transformed mean_cca_corr mean_sq_cca_corr inverse
+2)  fisher z for correlations
+3)  within class/functionality/layers
+4)  average
+
+```{r contrast code}
+average_fisherz$func_con[average_fisherz$functionality == "ablation_impact"] <- -0.5
+average_fisherz$func_con[average_fisherz$functionality == "decoding_accuracy_delta"] <- 0.5
+
+average_fisherz$func  = factor(average_fisherz$functionality)
+average_fisherz$layer_ordered <- factor(average_fisherz$layer, 
+                                   levels=c(    
+                                     "layer1.0",  "layer1.1", "layer1.2",
+                                     "layer2.0",  "layer2.1", "layer2.2", "layer2.3",
+                                     "layer3.0",  "layer3.1", "layer3.2", "layer3.3", "layer3.4", "layer3.5",
+                                     "layer4.0",  "layer4.1", "layer4.2"))
+average_fisherz$layer_con  = factor(average_fisherz$layer_ordered)
+
+contrasts(average_fisherz$layer_con) = contr.helmert(16)
+```
+
+# Multilevel modeling
+```{r multilevel modeling }
+full = lmer(corr_z ~ func_con * layer_con + (1|class)   , data = average_fisherz)
+summary(full)
+```
+
+# omnibus
+
+```{r}
+Anova(full, type = "III", test.statistic = "F")
+```
+
+# main effect of functionality
+```{r raincloudplots main effect of functionality}
+# parameters __________________________________________________________________
+model = 'resnet'
+model_keyword = "resnet"
+subjectwise_mean = "mean_per_sub"
+group_mean = "mean_per_sub_norm_mean"
+iv = "func"
+ylim = c(-.25, 1)
+se = "se"
+subject = "class"
+ggtitle = paste0(model_keyword,
+                 " :: Functionality, averaged across layers and classes")
+legend_title = "Functionality"
+xlab = "Functionality "
+ylab = "Correlation between \nmetric and functionality"
+
+dv_keyword = "corr"
+
+classwise <- meanSummary(average_fisherz,
+                         c(subject, iv), "corr_z")
+
+groupwise <- summarySEwithin(
+  data = classwise,
+  measurevar = "mean_per_sub",
+  withinvars = c(iv),
+  idvar = subject
+)
+
+subjectwise = classwise
+color <- c("#D73027", "#4575B4")
+
+# ggplot ______________________________________________________________________
+p1 <- ggplot(data = subjectwise,
+            aes(
+              y = .data[[subjectwise_mean]],
+              x = factor(.data[[iv]]),
+              fill = factor(.data[[iv]])
+            )) +
+  
+  geom_half_violin(
+    aes(fill = factor(.data[[iv]])),
+    side = 'r',
+    position = 'dodge',
+    adjust = 1.5,
+    trim = FALSE,
+    alpha = .3,
+    colour = NA
+  ) +
+  
+  geom_line(data = subjectwise,
+    aes(
+      group = .data[[subject]],
+      x = as.numeric(.data[[iv]]) - .15,
+      y = .data[[subjectwise_mean]],
+      fill = factor(.data[[iv]])
+      ),
+    linetype = "solid",
+    color = "grey",
+    alpha = .3) +
+
+  geom_point(
+    aes(
+      x = as.numeric(.data[[iv]]) - .15,
+      y = .data[[subjectwise_mean]],
+      color = factor(.data[[iv]])
+    ),
+    position = position_jitter(width = .05),
+    size = 2,
+    alpha = 0.8,
+    
+  ) +
+  
+  geom_half_boxplot(
+    aes(x = .data[[iv]],
+        y = .data[[subjectwise_mean]],
+        fill = .data[[iv]]),
+    side = "r",
+    outlier.shape = NA,
+    alpha = 0.8,
+    width = .1,
+    colour = "black",
+    errorbar.draw = FALSE
+  ) +
+  
+  # legend stuff ________________________________________________________
+  
+  guides(color = "none") +
+  guides(fill = guide_legend(title = legend_title)) +
+  scale_fill_manual(values = color) +
+  scale_color_manual(values = color) +
+  ggtitle(ggtitle) +
+  scale_x_discrete(
+    labels = c(
+      "ablation_impact" = "Network performance deficits",
+      "decoding_accuracy_delta" = "Decoding accuracy deficits"
+    )
+  ) +
+  xlab(xlab) +
+  ylab(ylab) +
+  ylim(ylim) +
+  theme_bw() + theme_classic2() +
+  theme(aspect.ratio = 6 / 10) +
+  theme(legend.position = "none",
+        text = element_text(family = "DejaVu Sans"), 
+        plot.title = element_text(size=12))
+
+save_fname <-
+  file.path(main_dir, 'figure', model,
+            paste0(model, '01_iv-', iv, '_dv-', dv_keyword, '.png'))
+ggsave(
+  save_fname,
+  width = w,
+  unit = "in",
+  dpi = 600,
+  scale = 2.5
+)
+p1
+```
+
+
+## main effect of layer
+```{r raincloudplots main effect of layer}
+# parameters __________________________________________________________________
+metric_classwise <- meanSummary(
+        average_fisherz,
+        c("class","layer_con"), "corr_z"
+    )
+
+metric_groupwise <- summarySEwithin(
+        data = metric_classwise,
+        measurevar = "mean_per_sub", # variable created from above
+        withinvars = c( "layer_con"), # iv
+        idvar = "class"
+    )
+
+subjectwise = metric_classwise
+groupwise = metric_groupwise
+subjectwise_mean = "mean_per_sub"
+group_mean = "mean_per_sub_norm_mean"
+iv = "layer_con"
+ylim = c(-.25, 1)
+se = "se"
+subject = "class"
+ggtitle = paste0(model_keyword, " :: average value across metrics and functionality")
+legend_title = "layer"
+xlab = "Layer"
+ylab = "Correlation between \nlayer and functionality"
+iv_keyword = "layer"
+dv_keyword = "corr"
+color <- c( "#FFA318","#F99A27","#F39237","#ED8946","#E68156","#E07865","#DA7074","#D46784","#CE5F93","#C856A3","#C24EB2","#BC45C1","#B53DD1","#AF34E0","#A92CF0","#A323FF") 
+# ggplot ______________________________________________________________________
+p2 <- ggplot(data = subjectwise,
+            aes(
+              y = .data[[subjectwise_mean]],
+              x = factor(.data[[iv]]),
+              fill = factor(.data[[iv]])
+            )) +
+  geom_half_violin(
+    aes(fill = factor(.data[[iv]])),
+    side = 'r',
+    position = 'dodge',
+    adjust = 1.5,
+    trim = TRUE,
+    alpha = .3,
+    colour = NA
+  ) +
+  
+  geom_point(
+    aes(
+      x = as.numeric(factor(.data[[iv]])) - .15 ,
+      y = .data[[subjectwise_mean]],
+      color = factor(.data[[iv]])
+    ),
+    position = position_jitter(width = .05),
+    size = 2,
+    alpha = 0.8,
+  ) +
+  
+  geom_boxplot(
+    aes(x = .data[[iv]],
+        y = .data[[subjectwise_mean]],
+        fill = .data[[iv]]),
+    side = "r",
+    outlier.shape = NA,
+    alpha = 0.8,
+    width = .2,
+    colour = "black",
+    notch = FALSE,
+    notchwidth = 0,
+    varwidth = FALSE, 
+    errorbar.draw = FALSE
+  ) +
+  
+  # legend stuff ________________________________________________________ # nolint
+
+  guides(fill = guide_legend(override.aes = list(shape = 20, size = 1, alpha = 1))) +
+           theme(legend.title = legend_title) +
+  scale_shape(guide=FALSE) +
+  scale_fill_manual(values = color) +
+  scale_color_manual(values = color) +
+  ggtitle(ggtitle) +
+  xlab(xlab) +
+  ylab(ylab) +
+  ylim(ylim) +
+  theme_bw() + theme_classic2() +
+  theme(axis.text.x = element_text(
+    angle = 30,
+    vjust = 1,
+    hjust = 1
+  )) +
+  theme(aspect.ratio = 6 / 10) +
+  theme(legend.position = "none",
+        text = element_text(family = "DejaVu Sans"), 
+        plot.title = element_text(size=12))
+save_fname <-
+  file.path(main_dir, 'figure', model, 
+            paste0(model, '04_iv-', iv_keyword, '_dv-', dv_keyword, '.png'))
+ggsave(
+  save_fname,
+  width = w,
+  #height = h,
+  unit = "in",
+  dpi = 600,
+  scale = 2.5
+)
+
+p2
+```
+
+## check nan values
+```{r}
+# check nan
+rows_with_nans <- apply(average_fisherz, 1, function(row) any(is.na(row)))
+print(average_fisherz[rows_with_nans, ])
+average_fisherz_dropna <- average_fisherz[complete.cases(average_fisherz), ]
+print(average_fisherz_dropna)
+```
+
+
+# ggplot interaction (function x layer)
+```{r raincloudplots interaction}
+library(gghalves)
+
+# parameters __________________________________________________________________
+average_fisherz_dropna$func = average_fisherz_dropna$functionality
+int_unitwise <- meanSummary(
+        average_fisherz_dropna,
+        c("class", "func", "layer_ordered"), "corr_z"
+    )
+
+int_groupwise <- summarySEwithin(
+        data = int_unitwise,
+        measurevar = "mean_per_sub", # variable created from above
+        withinvars = c("func", "layer_ordered"), # iv
+        idvar = "class"
+    )
+
+subjectwise = int_unitwise
+subjectwise$layer_ordered <- factor(
+  subjectwise$layer_ordered,
+  levels = c(    
+    "layer1.0",  "layer1.1", "layer1.2",
+    "layer2.0",  "layer2.1", "layer2.2", "layer2.3",
+    "layer3.0",  "layer3.1", "layer3.2", "layer3.3", "layer3.4", "layer3.5",
+    "layer4.0",  "layer4.1", "layer4.2"
+  )
+)
+subjectwise$varint <-
+  as.factor(paste(subjectwise$layer_ordered, subjectwise$func))
+subjectwise$varint <- factor(
+  subjectwise$varint,
+  levels =  c(
+    "layer1.0 ablation_impact",  "layer1.1 ablation_impact", "layer1.2 ablation_impact",
+    "layer2.0 ablation_impact",  "layer2.1 ablation_impact", "layer2.2 ablation_impact", "layer2.3 ablation_impact",
+    "layer3.0 ablation_impact", "layer3.1 ablation_impact", "layer3.2 ablation_impact",
+    "layer3.3 ablation_impact", "layer3.4 ablation_impact", "layer3.5 ablation_impact",
+    "layer4.0 ablation_impact", "layer4.1 ablation_impact", "layer4.2 ablation_impact",
+
+    "layer1.0 decoding_accuracy_delta",  "layer1.1 decoding_accuracy_delta", "layer1.2 decoding_accuracy_delta",
+    "layer2.0 decoding_accuracy_delta",  "layer2.1 decoding_accuracy_delta", "layer2.2 decoding_accuracy_delta", "layer2.3 decoding_accuracy_delta",
+    "layer3.0 decoding_accuracy_delta", "layer3.1 decoding_accuracy_delta", 
+    "layer3.2 decoding_accuracy_delta", "layer3.3 decoding_accuracy_delta", 
+    "layer3.4 decoding_accuracy_delta", "layer3.5 decoding_accuracy_delta",
+    "layer4.0 decoding_accuracy_delta", "layer4.1 decoding_accuracy_delta", 
+    "layer4.2 decoding_accuracy_delta"
+  )
+)
+groupwise = int_groupwise
+iv1 = "func"
+iv2 = "layer_ordered" 
+sub_mean = "mean_per_sub" 
+group_mean = "mean_per_sub_norm_mean" 
+se = "se" ; subject = "class"
+ggtitle = paste0(model_keyword," :: Interaction of functionality and layer" )
+
+legend_title = "Layer"
+xlab = "Functionality"
+ylab = "Correlation between \nlayer and functionality"
+iv_keyword = "funcXlayer"
+dv_keyword = "corr"
+
+int_color = c(
+  "#FFECC9","#FFE3BE","#FFDAB4","#FFD0A9","#FEC79E","#FEBE93","#FEB589","#FEAC7E","#FEA273","#FE9968","#FE905E","#FE8753","#FD7E48","#FD743D","#FD6B33","#FD6228",
+              # decoding 16 conditions
+  "#FFECC9","#F3DCCC","#E7CDD0","#DBBDD3","#CFADD7","#C39DDA","#B78EDD","#AB7EE1","#A06EE4","#945EE8","#884FEB","#7C3FEE","#702FF2","#641FF5","#5810F9","#4C00FC"
+)
+bw_color = c("#0F0F0F", "#494949", "#838383", "#BDBDBD", "#F7F7F7", "#BDBDBD", "#F7F7F7","#838383", "#BDBDBD", "#BDBDBD")
+p3 <- ggplot(data = subjectwise,
+            aes(y = .data[[sub_mean]],
+                x = .data[[iv1]],
+                fill =varint,
+                width=.9)) +
+  geom_half_violin(
+    aes(fill = varint),#.data[[iv2]]),
+    position = position_nudge(x = .1, y = 0),
+    adjust = 1.5,
+    trim = FALSE,
+    alpha = 0,
+    colour = NA
+  ) +
+
+  geom_point(
+    data = subjectwise,
+    aes(
+      x = .data[[iv1]],
+      y = .data[[sub_mean]],
+      color = varint
+    ),
+    position = position_jitterdodge(), 
+    size = 2,
+    alpha = 0.8,
+    shape = 20, 
+    show.legend=FALSE
+  ) +
+
+  geom_half_boxplot(
+    data = subjectwise,
+    aes(x = .data[[iv1]],
+        y = .data[[sub_mean]],
+        fill = varint),
+    side = "r",
+    outlier.shape = NA,
+    alpha = 0.8,
+    width = .8,
+    colour = "black",
+    notch = FALSE,
+    notchwidth = 0,
+    varwidth = FALSE,
+    errorbar.draw = FALSE,
+    center = TRUE,
+    show.legend=TRUE
+  ) +
+
+  # legend stuff __________________________________________________________________________________ # nolint
+
+  scale_fill_manual(values = int_color, name = "metric", guide = "none") +
+  scale_color_manual( values = int_color, name = "metric", guide = "none") +
+
+  guides(fill = "none") +
+  guides(color = "none") +
+  ggtitle(ggtitle) +
+  xlab(xlab) +
+  ylab(ylab) +
+    scale_x_discrete(
+    labels = c(
+      "ablation_impact" = "Network performance deficits",
+      "decoding_accuracy_delta" = "Decoding accuracy deficits"
+    )
+  ) +
+
+  theme_bw() + theme_classic2() +
+    #theme(aspect.ratio=4/6) 
+theme(aspect.ratio = 6 / 10) +
+  theme(legend.position = "none",
+        text = element_text(family = "DejaVu Sans"), 
+        plot.title = element_text(size=14))
+
+
+p3
+
+p3
+save_fname <-
+  file.path(main_dir, 'figure', model,
+            paste0(model, '05_iv-', iv_keyword, '_dv-', dv_keyword, '.png'))
+
+
+ggsave(
+  save_fname,
+  plot = p3,
+  width = w,
+  #height = h,
+  unit = "in",
+  dpi = 600,
+  scale = 2.5)
+```
+
+## ggplot metrix X layer X functionality
+```{r concatenate dataframe}
+main_dir <- dirname(getwd())
+main_dir <- "/Users/h/Dropbox/projects_dropbox/other_sideprojects/iclr/third_revision"
+model = 'resnet50'
+concat_df = data.frame()
+  for (dv in c('resnet50_ablation_impact_X_cka', 
+               'resnet50_ablation_impact_X_mean_cca_corr', 
+               'resnet50_ablation_impact_X_mean_sq_cca_corr',
+               'resnet50_ablation_impact_X_procrustes', 
+               'resnet50_ablation_impact_X_pwcca',
+               'resnet50_decoding_accuracy_delta_X_cka',
+               'resnet50_decoding_accuracy_delta_X_mean_cca_corr',
+               'resnet50_decoding_accuracy_delta_X_mean_sq_cca_corr',
+               'resnet50_decoding_accuracy_delta_X_procrustes', 
+               'resnet50_decoding_accuracy_delta_X_pwcca')) {
+  if (model == "alexnet") {
+    data_fname <- file.path(main_dir, 'data', model, paste0(dv, '.csv'))
+  } else if (model == "mobilenet") {
+    data_fname <- file.path(main_dir, 'data', model, paste0(dv, '-mobilenet.csv'))
+  } else if (model == "resnet50") {
+    data_fname <- file.path(main_dir, 'data', model, paste0(dv, '.csv'))
+  }
+  
+df <- read.csv(data_fname)
+newdv <- sub("^resnet50_", "", dv)
+df$functionality <- strsplit(newdv, '_X_')[[1]][1]
+df$metric <- strsplit(newdv, '_X_')[[1]][2]
+concat_df <- rbind(concat_df, df)
+}
+
+
+
+concat_df = concat_df %>% mutate(corr_transform = ifelse(metric == "mean_cca_corr" | metric == "mean_sq_cca_corr", -1 * correlation, correlation))
+# parameters __________________________________________________________________
+for (metric in c("cka","mean_cca_corr","mean_sq_cca_corr","procrustes","pwcca"  ) ) {
+  print(metric)
+  
+}
+```
+
+
+```{r concatenate dataframe}
+model_keyword = "resnet50"
+N <- concat_df %>%
+  group_by(class ,layer, functionality)  %>%
+  mutate(fisherz = DescTools::FisherZ(corr_transform))
+average_fisherz <- meanSummary(N,
+                         c("class", "layer","metric", "functionality"), "fisherz")
+average_fisherz$fisherz <- average_fisherz$mean_per_sub
+average_fisherz$corr_z = DescTools::FisherZInv(average_fisherz$fisherz)
+
+average_fisherz$func_con[average_fisherz$functionality == "ablation_impact"] <- -0.5
+average_fisherz$func_con[average_fisherz$functionality == "decoding_accuracy_delta"] <- 0.5
+
+average_fisherz$func  = factor(average_fisherz$functionality)
+average_fisherz$layer_ordered <- factor(average_fisherz$layer, 
+                                   levels=c(
+                                     "layer1.0",  "layer1.1", "layer1.2",
+                                     "layer2.0",  "layer2.1", "layer2.2", "layer2.3",
+                                     "layer3.0",  "layer3.1", "layer3.2", "layer3.3", "layer3.4", "layer3.5",
+                                     "layer4.0",  "layer4.1", "layer4.2"
+                                   ))
+average_fisherz$layer_con  = factor(average_fisherz$layer_ordered)
+
+contrasts(average_fisherz$layer_con) = contr.helmert(16)
+
+for (metric in c("cka","mean_cca_corr","mean_sq_cca_corr","procrustes","pwcca"  ) ) {
+  print(metric)
+  subset_df = average_fisherz[average_fisherz$metric == metric,]
+
+
+
+int_unitwise <- meanSummary(
+        subset_df,
+        c("class", "func", "layer_ordered"), "corr_z"
+    )
+
+int_groupwise <- summarySEwithin(
+        data = int_unitwise,
+        measurevar = "mean_per_sub", # variable created from above
+        withinvars = c("func", "layer_ordered"), # iv
+        idvar = "class"
+    )
+
+test_subjectwise = int_unitwise
+test_subjectwise$varint <-
+  as.factor(paste(test_subjectwise$layer_ordered, test_subjectwise$func))
+test_subjectwise$varint <- factor(
+  test_subjectwise$varint,
+  levels =  c(
+    "layer1.0 ablation_impact",  "layer1.1 ablation_impact", "layer1.2 ablation_impact",
+    "layer2.0 ablation_impact",  "layer2.1 ablation_impact", "layer2.2 ablation_impact", "layer2.3 ablation_impact",
+    "layer3.0 ablation_impact", "layer3.1 ablation_impact", "layer3.2 ablation_impact",
+    "layer3.3 ablation_impact", "layer3.4 ablation_impact", "layer3.5 ablation_impact",
+    "layer4.0 ablation_impact", "layer4.1 ablation_impact", "layer4.2 ablation_impact",
+
+    "layer1.0 decoding_accuracy_delta",  "layer1.1 decoding_accuracy_delta", "layer1.2 decoding_accuracy_delta",
+    "layer2.0 decoding_accuracy_delta",  "layer2.1 decoding_accuracy_delta", "layer2.2 decoding_accuracy_delta", "layer2.3 decoding_accuracy_delta",
+    "layer3.0 decoding_accuracy_delta", "layer3.1 decoding_accuracy_delta", 
+    "layer3.2 decoding_accuracy_delta", "layer3.3 decoding_accuracy_delta", 
+    "layer3.4 decoding_accuracy_delta", "layer3.5 decoding_accuracy_delta",
+    "layer4.0 decoding_accuracy_delta", "layer4.1 decoding_accuracy_delta", 
+    "layer4.2 decoding_accuracy_delta"
+    )
+)
+test_groupwise = int_groupwise
+iv1 = "func"
+iv2 = "layer_ordered" 
+sub_mean = "mean_per_sub" 
+group_mean = "mean_per_sub_norm_mean" 
+se = "se" ; subject = "class"
+ggtitle = paste0(model_keyword," :: ", metric, " :: Interaction of functionality and layer" )
+
+legend_title = "Layer"
+xlab = "Functionality"
+ylab = "Correlation between \nRDM and functionality"
+iv_keyword = "funcXlayer"
+dv_keyword = "corr"
+
+int_color = c(
+  "#FFECC9","#FFE3BE","#FFDAB4","#FFD0A9","#FEC79E","#FEBE93","#FEB589","#FEAC7E","#FEA273","#FE9968","#FE905E","#FE8753","#FD7E48","#FD743D","#FD6B33","#FD6228",
+              # decoding 16 conditions
+  "#FFECC9","#F3DCCC","#E7CDD0","#DBBDD3","#CFADD7","#C39DDA","#B78EDD","#AB7EE1","#A06EE4","#945EE8","#884FEB","#7C3FEE","#702FF2","#641FF5","#5810F9","#4C00FC"
+)
+
+bw_color = c("#0F0F0F", "#494949", "#838383", "#BDBDBD", "#F7F7F7", "#BDBDBD", "#F7F7F7","#838383", "#BDBDBD", "#BDBDBD")
+# rows_with_nan <- apply(int_groupwise$mean_per_sub_mean, 1, function(row) any(is.na(row)))
+# if (any(is.na(int_groupwise[["mean_per_sub_mean"]]))) {
+    # If NaNs are present, remove the corresponding colors
+# remove colors###########
+num_nans <- which(is.na(int_groupwise[["mean_per_sub_mean"]]))
+int_color <- int_color[-num_nans]
+# # Drop rows with NaN values in a specific column
+subjectwise <- test_subjectwise[complete.cases(test_subjectwise$mean_per_sub), , drop = FALSE]
+groupwise <- test_groupwise[complete.cases(test_groupwise$mean_per_sub_mean), , drop = FALSE]
+print(unique(subjectwise$varint))
+# print(unique(groupwise$layer_ordered))
+##########################
+p3 <- ggplot(data = subjectwise,
+            aes(y = .data[[sub_mean]],
+                x = .data[[iv1]],
+                fill = varint,
+                width=.9)) +
+  geom_half_violin(
+    aes(fill = varint),#.data[[iv2]]),
+    position = position_nudge(x = .1, y = 0),
+    adjust = 1.5,
+    trim = FALSE,
+    alpha = 0,
+    colour = NA
+  ) +
+
+  geom_point(
+    data = subjectwise,
+    aes(
+      x = .data[[iv1]],
+      y = .data[[sub_mean]],
+      color = varint
+    ),
+    position = position_jitterdodge(), 
+    size = 2,    alpha = 0.8,    shape = 20,     show.legend=FALSE
+  ) +
+
+  geom_half_boxplot(
+    data = subjectwise,
+    aes(x = .data[[iv1]],
+        y = .data[[sub_mean]],
+        fill = varint),
+    side = "r",    outlier.shape = NA,    alpha = 0.8,    width = .8,
+    colour = "black",    notch = FALSE,    notchwidth = 0,
+    varwidth = FALSE,    errorbar.draw = FALSE,    center = TRUE,    show.legend=FALSE
+  ) +
+
+  # legend stuff __________________________________________________________________________________ # nolint
+  guides(fill = "none") +
+  guides(color = "none") +
+  ggtitle(ggtitle) +
+  xlab(xlab) +
+  ylab(ylab) +
+  scale_x_discrete(
+    labels = c(
+      "ablation_impact" = "Network performance deficits",
+      "decoding_accuracy_delta" = "Decoding accuracy deficits"
+    )
+  ) +
+
+  theme_bw() +
+  theme_classic2() +
+    #theme(aspect.ratio=4/6)
+theme(aspect.ratio = 6 / 10) +
+  theme(
+        text = element_text(family = "DejaVu Sans"),
+        plot.title = element_text(size=14)) 
+
+
+print(p3)
+
+p3
+save_fname <-
+  file.path(main_dir, 'figure', model, 
+            paste0(model, '06_iv-', iv_keyword, '_dv-', dv_keyword, '_metric-', metric, '.png'))
+
+w = 3
+ggsave(save_fname,  plot = p3,  width = w,  unit = "in",  dpi = 600,  scale = 5)   #height = h,
+
+}
+```
+
