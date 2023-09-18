@@ -1,0 +1,22 @@
+
+* metric: ablation_impact_X_cka  >>>   stats: b = 0.19, t(7.34) = 4.118, p = 0.004
+
+* metric: ablation_impact_X_decoding_accuracy_delta  >>>   stats: b = 0.245, t(7.93) = 4.574, p = 0.0019
+
+* metric: ablation_impact_X_mean_cca_corr  >>>   stats: b = -0.196, t(8.29) = -3.654, p = 0.0061
+
+* metric: ablation_impact_X_mean_sq_cca_corr  >>>   stats: b = -0.195, t(8.33) = -3.628, p = 0.0063
+
+* metric: ablation_impact_X_procrustes  >>>   stats: b = 0.212, t(6.86) = 4.684, p = 0.0024
+
+* metric: ablation_impact_X_pwcca  >>>   stats: b = 0.188, t(7.35) = 3.866, p = 0.0056
+
+* metric: decoding_accuracy_delta_X_cka  >>>   stats: b = 0.619, t(6.17) = 5.817, p = 0.001
+
+* metric: decoding_accuracy_delta_X_mean_cca_corr  >>>   stats: b = -0.435, t(6.16) = -3.778, p = 0.0088
+
+* metric: decoding_accuracy_delta_X_mean_sq_cca_corr  >>>   stats: b = -0.437, t(6.16) = -3.805, p = 0.0085
+
+* metric: decoding_accuracy_delta_X_procrustes  >>>   stats: b = 0.615, t(6.11) = 5.509, p = 0.0014
+
+* metric: decoding_accuracy_delta_X_pwcca  >>>   stats: b = 0.429, t(6.14) = 3.633, p = 0.0105
