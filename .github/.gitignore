@@ -1,3 +1,5 @@
 *.html
-./third_revision
-./archive
+**/.DS_Store
+**/.Rhistory
+**/archive/*
+**/third_revision/*
