@@ -6,5 +6,5 @@
 /first_submission/scripts/nn_corr.Rmd
 /first_submission/scripts/nn_multilevel.Rmd
 /first_submission/scripts/nn_corr_multilevel_mobile.Rmd
-archive/
-third_revision/
+**/archive/*
+**/third_revision/*
