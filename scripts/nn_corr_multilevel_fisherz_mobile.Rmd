@@ -1,7 +1,7 @@
 ---
 title: "iclr_corr"
-author: "Heejung Jung"
-date: '2023-09-18'
+author: "Anonymous"
+date: '2024-01-21'
 output:
   html_document:
     toc: true
@@ -33,13 +33,12 @@ Factors:
 * Afterward, I plan to convert the B0 estimate back into an r value, which is interpretable. 
 
 
-TODO: concatenate all .csv files
-make sure that the factor information is inserted into each 
+
 """
-# load data
-# calculate correlation
-# fisher z transform 
-# model mean cor value for class layer unit
+* [ ] load data
+* [ ] calculate correlation
+* [ ] fisher z transform 
+* [ ] model mean cor value for class layer unit
 
 ```{r load libraries, include=FALSE}
 library(psych)
