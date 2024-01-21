@@ -132,13 +132,66 @@ contrasts(average_fisherz$metric_con) = contr.helmert(5)
 ```{r multilevel modeling }
 full = lmer(corr_z ~ func_con * metric_con + (1|class)  , data = average_fisherz)
 summary(full)
+equatiomatic::extract_eq(full)
 ```
 
-# pairwisee
+# Omnibus test of functionality and metric
 
 ```{r}
 Anova(full, type = "III", test.statistic = "F")
+# equatiomatic::extract_eq(Anova(full, type = "III", test.statistic = "F"))
+
+
 ```
+
+$$
+\text{CorrZ}_{ij} = \beta_0 + \beta_1 \text{Functionality}_{ij} + \beta_2 \text{Metric}_{ij} + \beta_3 \text{Functionality}_{ij} \times \text{Metric}_{ij} + u_{j} + \epsilon_{ij}
+
+$$
+
+Illustration of component
+
+$$
+- \text{CorrZ}_{ij} is the dependent variable for the $i$-th observation in the $j$-th class.
+- \text{Functionality}_{ij} and $\text{Metric}_{ij}$ are the fixed effects of functionality condition and metric condition, respectively.
+- \text{Functionality}_{ij} \times \text{Metric}_{ij}$ represents the interaction between functionality and metric conditions.
+- u_{j}$ is the random effect for the $j$-th class.
+- \beta_0, \beta_1, \beta_2, \beta_3$ are the fixed effect coefficients.
+- \epsilon_{ij}$ is the error term.
+
+$$
+
+
+$$
+$\text{CorrZ}_{ij}$ is the dependent variable for the $i$-th observation in the $j$-th class.
+- $\text{Functionality}_{ij}$ and $\text{metric\_con}_{ij}$ are the fixed effects of functionality condition and metric condition, respectively.
+- $\text{Functionality}_{ij} \times \text{metric\_con}_{ij}$ represents the interaction between functionality and metric conditions.
+- $u_{j}$ is the random effect for the $j$-th class.
+- $\beta_0, \beta_1, \beta_2, \beta_3$ are the fixed effect coefficients.
+- $\epsilon_{ij}$ is the error term.
+
+$$
+
+$$
+\begin{align*}
+    & \boldsymbol{\textbf{CorrZ}_{ij}} = \beta_0 + \beta_1 \text{Functionality}_{ij} + \beta_2 \text{Metric}_{ij} + \beta_3 \text{Functionality}_{ij} \times \text{Metric}_{ij} + u_{j} + \epsilon_{ij} \\
+    \text{Where:} & \\
+    & \bullet \ \boldsymbol{\textbf{CorrZ}_{ij}} \text{: Dependent variable for the } i\text{-th observation in the } j\text{-th class.} \\
+    & \bullet \ \boldsymbol{\textbf{Functionality}_{ij}}: \text{Fixed effects of functionality conditions (i.e. average difference values of functionality conditions.) } \\
+    & \bullet \ \boldsymbol{\textbf{Metric}_{ij}}: \text{Fixed effects of metric conditions (i.e. average difference across the metric conditions.)} \\
+    & \bullet \ \boldsymbol{\textbf{Functionality}_{ij}} \times \boldsymbol{\textbf{Metric}_{ij}}: \text{Interaction between functionality and metric conditions. Testing interaction effects allows us to answer the following question: Do the differences of the metric conditions differ as a function of functionality differences?} \\
+
+    & \bullet \ \boldsymbol{u_{j}}: \text{Random effect for the } j\text{-th class: In our analysis, the term "cluster" refers to the representation class, e.g. Junko Bird, yielding multiple correlation coefficients. This model accounts for intra-cluster variance, acknowledging that variability exists within these clusters. By capturing these effects, we gain a more precise understanding of the fixed effects, i.e. the difference of using different decoding metrics different functionality approaches, which are the primary factors of interest in our scenario.} \\
+
+    & \bullet \ \boldsymbol{\beta_0, \beta_1, \beta_2, \beta_3}: \text{Fixed effect coefficients.} \\
+    & \bullet \ \boldsymbol{\epsilon_{ij}}: \text{Error term. This is the left over residual, after accounting for the aforementioned fixed and random effects.}
+\end{align*}
+
+
+$$
+
+
+
 
 ```{r}
 library(emmeans)
@@ -595,3 +648,22 @@ ggplot(corr_linear) +
   theme_bw() +
   labs(title = "bw Theme")
 ```
+
+
+# contrast code CKA/Procrustes vs CCA
+```{r}
+average_fisherz$func_con[average_fisherz$functionality == "ablation_impact"] <- -0.5
+average_fisherz$func_con[average_fisherz$functionality == "decoding_accuracy_delta"] <- 0.5
+
+
+average_fisherz$metric_cca[average_fisherz$metric == "cka"] <- 0.5
+average_fisherz$metric_cca[average_fisherz$metric == "procrustes"] <- 0.5
+average_fisherz$metric_cca[average_fisherz$metric == "mean_cca_corr"] <- -0.5
+average_fisherz$metric_cca[average_fisherz$metric == "mean_sq_cca_corr"] <- -0.5
+average_fisherz$metric_cca[average_fisherz$metric == "pwcca"] <- -0.5
+
+average_fisherz$func  = factor(average_fisherz$functionality)
+model.cca = lmer(corr_z ~ func_con * metric_cca + (1|class)  , data = average_fisherz)
+summary(model.cca)
+```
+
