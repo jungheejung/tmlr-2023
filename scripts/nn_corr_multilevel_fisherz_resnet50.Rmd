@@ -294,53 +294,6 @@ concat_df = concat_df %>% mutate(corr_transform = ifelse(metric == "mean_cca_cor
 ```
 
 
-```{r fisher z transform}
-N <- concat_df %>%
-  group_by(class ,layer, functionality)  %>%
-  mutate(fisherz = DescTools::FisherZ(corr_transform))
-average_fisherz <- meanSummary(N,
-                         c("class", "layer", "functionality"), "fisherz")
-average_fisherz$fisherz <- average_fisherz$mean_per_sub
-average_fisherz$corr_z = DescTools::FisherZInv(average_fisherz$fisherz)
-
-```
-
-
-```{r contrast code}
-average_fisherz$func_con[average_fisherz$functionality == "ablation_impact"] <- -0.5
-average_fisherz$func_con[average_fisherz$functionality == "decoding_accuracy_delta"] <- 0.5
-# average_fisherz$classTMP <- average_fisherz$layer
-# average_fisherz$layerTMP <- average_fisherz$class
-# average_fisherz$layer <- average_fisherz$layerTMP
-# average_fisherz$class <- average_fisherz$classTMP
-average_fisherz$func  = factor(average_fisherz$functionality)
-average_fisherz$layer_ordered <- factor(average_fisherz$layer, 
-                                   levels=c( "layer1.0",  "layer1.1", "layer1.2",
-                                             "layer2.0",  "layer2.1", "layer2.2", "layer2.3",
-                                             "layer3.0",  "layer3.1", "layer3.2", "layer3.3", "layer3.4", "layer3.5",
-                                             "layer4.0",  "layer4.1", "layer4.2"))
-average_fisherz$layer_con  = factor(average_fisherz$layer_ordered)
-
-contrasts(average_fisherz$layer_con) = contr.helmert(16)
-```
-
-# Multilevel modeling
-```{r multilevel modeling }
-full = lmer(corr_z ~ func_con * layer_con + (1|class)   , data = average_fisherz)
-summary(full)
-```
-
-# pairwisee
-```{r}
-library(emmeans)
-# emmeans(full, list(pairwise ~ layer_con* func_con), adjust = "tukey")
-```
-
-
-```{r}
-Anova(full, type = "III", test.statistic = "F")
-```
-
 # main effect of functionality
 ```{r raincloudplots main effect of functionality}
 # parameters __________________________________________________________________
@@ -459,7 +412,7 @@ ggsave(
 )
 p1
 ```
-## main effect of layer
+
 
 # check nan values
 ```{r}
@@ -822,3 +775,37 @@ ggsave(
 
 
 
+# contrast code CKA/Procrustes vs CCA
+```{r}
+average_fisherz$func_con[average_fisherz$functionality == "ablation_impact"] <- -0.5
+average_fisherz$func_con[average_fisherz$functionality == "decoding_accuracy_delta"] <- 0.5
+
+
+average_fisherz$metric_cca[average_fisherz$metric == "cka"] <- 0.5
+average_fisherz$metric_cca[average_fisherz$metric == "procrustes"] <- 0.5
+average_fisherz$metric_cca[average_fisherz$metric == "mean_cca_corr"] <- -0.5
+average_fisherz$metric_cca[average_fisherz$metric == "mean_sq_cca_corr"] <- -0.5
+average_fisherz$metric_cca[average_fisherz$metric == "pwcca"] <- -0.5
+
+average_fisherz$func  = factor(average_fisherz$functionality)
+model.cca = lmer(corr_z ~ func_con * metric_cca + (1|class)  , data = average_fisherz)
+summary(model.cca)
+```
+
+
+# contrast code CKA/Procrustes vs CCA
+```{r}
+average_fisherz$func_con[average_fisherz$functionality == "ablation_impact"] <- -0.5
+average_fisherz$func_con[average_fisherz$functionality == "decoding_accuracy_delta"] <- 0.5
+
+
+average_fisherz$metric_cca[average_fisherz$metric == "cka"] <- 0.5
+average_fisherz$metric_cca[average_fisherz$metric == "procrustes"] <- 0.5
+average_fisherz$metric_cca[average_fisherz$metric == "mean_cca_corr"] <- -0.5
+average_fisherz$metric_cca[average_fisherz$metric == "mean_sq_cca_corr"] <- -0.5
+average_fisherz$metric_cca[average_fisherz$metric == "pwcca"] <- -0.5
+
+average_fisherz$func  = factor(average_fisherz$functionality)
+model.cca = lmer(corr_z ~ func_con * metric_cca + (1|class)  , data = average_fisherz)
+summary(model.cca)
+```

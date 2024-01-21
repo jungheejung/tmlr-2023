@@ -148,6 +148,46 @@ summary(full)
 ```
 
 
+## Omnibus results
+```{r}
+Anova(full, type = "III", test.statistic = "F")
+```
+# simple effects
+```{r}
+library(emmeans)
+# emmeans(full, list(pairwise ~ metric_con* func_con), adjust = "tukey")
+library(emmeans)
+emm1 = emmeans(full, specs =  ~ metric_con* func_con)
+
+cka_mean = c(0,0,0,1/2,0, 0,0,0,1/2,0)
+procrustes_mean = c(0,0,0,0,1/2, 0,0,0,0,1/2)
+
+cka_mean_causal = c(0,0,0,1/2,0, 0,0,0,0,0)
+procrustes_mean_causal = c(0,0,0,0,1/2, 0,0,0,0,0)
+
+cka_mean_noncausal = c(0,0,0,0,0, 0,0,0,1/2,0)
+procrustes_mean_noncausal = c(0,0,0,0,0, 0,0,0,0,1/2)
+
+cca_mean = c(1/6, 1/6, 1/6, 0, 0, 1/6, 1/6, 1/6, 0, 0)
+cka_pro = c(0,0,0,1/4,1/4, 0,0,0,1/4,1/4)
+
+cca_mean_causal = c(1/3, 1/3, 1/3, 0, 0,0,0,0,0,0)
+cka_pro_causal = c(0,0,0,1/2,1/2,0,0,0,0,0)
+
+cca_mean_noncausal = c(0,0,0,0,0,1/3, 1/3, 1/3, 0, 0)
+cka_pro_noncausal = c(0,0,0,0,0,  0,0,0,1/2,1/2)
+
+int = c(1,1,1,1,1,-1,-1,-1,-1,-1)
+contrast(emm1, method = list("cka/procrustes vs. mean_cca/mean_sq/pwcca on average" = cka_pro - cca_mean, 
+                             "procrustes vs. cka on average" = procrustes_mean - cka_mean,
+                             "procrustes vs. cka causal" = procrustes_mean_causal - cka_mean_causal,
+                             "procrustes vs. cka noncausal" = procrustes_mean_noncausal - cka_mean_noncausal,
+                             "within causal, cka/procrustes vs. mean_cca/mean_sq/pwcca" =  cka_pro_causal - cca_mean_causal,
+                             "within noncausal, cka/procrustes vs. mean_cca/mean_sq/pwcca" = cka_pro_noncausal - cca_mean_noncausal,
+                             "interaction, cka/procrustex vs. cca vs. functionality" = (cka_pro_causal - cca_mean_causal) - (cka_pro_noncausal - cca_mean_noncausal) ) )
+
+```
+
 ```{r barplot functionality}
 # parameters __________________________________________________________________
 model_keyword = "mobilenet"
@@ -552,6 +592,24 @@ ggsave(
   unit = "in",
   dpi = 600,
   scale = 2.5)
+```
+
+
+# contrast code CKA/Procrustes vs CCA
+```{r}
+average_fisherz$func_con[average_fisherz$functionality == "ablation_impact"] <- -0.5
+average_fisherz$func_con[average_fisherz$functionality == "decoding_accuracy_delta"] <- 0.5
+
+
+average_fisherz$metric_cca[average_fisherz$metric == "cka"] <- 0.5
+average_fisherz$metric_cca[average_fisherz$metric == "procrustes"] <- 0.5
+average_fisherz$metric_cca[average_fisherz$metric == "mean_cca_corr"] <- -0.5
+average_fisherz$metric_cca[average_fisherz$metric == "mean_sq_cca_corr"] <- -0.5
+average_fisherz$metric_cca[average_fisherz$metric == "pwcca"] <- -0.5
+
+average_fisherz$func  = factor(average_fisherz$functionality)
+model.cca = lmer(corr_z ~ func_con * metric_cca + (1|class)  , data = average_fisherz)
+summary(model.cca)
 ```
 
 ```{r}
