@@ -1,7 +1,7 @@
 ---
-title: "Alexnet"
+title: "Alexnet Downstream"
 author: "Anonymous"
-date: '2023-09-18'
+date: '2024-01-21'
 output:
   html_document:
     toc: true
@@ -81,7 +81,7 @@ scale = 2.5
 ```{r}
 
 main_dir <- dirname(getwd())
-model <- "alexnet"
+model <- "alexnet_downstream"
 fname <- file.path(main_dir, 'data', model, 'all_50_classes_all_metrics_correlations.csv')
 df <- read.csv(fname)
 df$functionality = df$A
